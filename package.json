@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --test tests/**/*.test.js",
-    "test:integration": "echo 'Run with DATABASE_URL set: node --test tests/integration/*.test.js'"
+    "test:integration": "echo 'Run with DATABASE_URL set: node --test tests/integration/*.test.js'",
+    "seed": "node prisma/seed.js",
+    "verify:crud": "node prisma/seed.js && node -e \"console.log('seed ok')\""
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

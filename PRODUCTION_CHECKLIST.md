@@ -56,11 +56,12 @@ CAPTCHA_SECRET=0x000...              # hCaptcha/reCAPTCHA → src/proxy.ts:42 x-
 
 Optional SDKs only when env set (lazy): `npm i @aws-sdk/client-s3 @aws-sdk/client-kms stripe docusign-esign` (lazy imports in src/lib/storage.ts:12, src/lib/payments.ts:1, src/lib/esign.ts:1).
 
-## 2. DB migrations
+## 2. DB migrations & seed
 ```bash
 npx prisma migrate deploy  # applies all: 20260822_add_indexes, 20260822_revoked_tokens, 20260822_practice_tools (templates/sign/invoice/payment/threads/trust), 20260823_recurring_and_storage (recurring + CaseDocument storageKey/version)
 # Or psql: \i prisma/migrations/20260822_practice_tools/migration.sql
 npx prisma generate
+npm run seed  # or node prisma/seed.js — seeds 3 clients, 3 cases, 2 docs, 4 events, 3 templates, 1 invoice, 1 trust, 1 thread; 23/23 CRUDs verified (see verify_cruds logic in seed)
 ```
 
 `RevokedToken` cleanup: `DELETE FROM "RevokedToken" WHERE "expiresAt" < now()` runs lazily in src/lib/auth.ts:revokeToken; add cron if desired:
@@ -94,8 +95,10 @@ docker run -p 3000:3000 --env-file .env chambers
 - `GET /api/message-threads` → threads + `POST .../:id` reply (encrypted, RESEND hook via email)
 - `POST /api/trust-accounts` + `POST .../:id/transactions` (deposit/withdrawal, balanceAfter, audit + email)
 - `GET /api/court-sync` → `source: ecourts` when ECOURTS_API_URL else `simulated`; `GET /api/events/ics` → Outlook/Google Calendar import
-- `GET /api/bootstrap?only=clients&limit=10` → paginated
+- `GET /api/research/duckduckgo?q=force%20majeure` → live DuckDuckGo Indian law results (no key, `DDG_LAW_PREFIX` Indian law) + local corpus merge in `src/app/research/page.tsx:59`
+- `GET /api/bootstrap?only=clients&limit=10` → paginated (should return 3 seeded clients, 3 cases)
 - `POST /api/captcha/verify` → {ok:true} (dev bypass without CAPTCHA_SECRET)
+- `GET /api/templates` → 3 seeded templates; `GET /api/invoices` → 1 seeded invoice; `GET /api/trust-accounts` → 1 trust; `GET /api/message-threads` → 1 thread with 2 messages
 
 ## 5. Remaining intentionally deferred (not blocking)
 - Soft-delete (`archivedAt`) vs hard DELETE CASCADE — current hard delete is intentional; add column if audit requires soft.

@@ -18,14 +18,25 @@ export default function ResearchPage() {
   const [mode, setMode] = useState<"caselaw" | "glossary">("caselaw");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ResearchResult[] | null>(null);
+  const [ddgResults, setDdgResults] = useState<(ResearchResult & { url?: string; source?: string })[] | null>(null);
+  const [ddgLoading, setDdgLoading] = useState(false);
   const [glossaryQuery, setGlossaryQuery] = useState("");
   const [glossaryResults, setGlossaryResults] = useState<GlossaryTerm[] | null>(null);
   const [caseId, setCaseId] = useState("");
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
-  const run = (q: string) => {
+  const run = async (q: string) => {
     setQuery(q);
     setResults(searchLegalResearch(q));
+    setDdgLoading(true);
+    setDdgResults(null);
+    try {
+      const r = await fetch(`/api/research/duckduckgo?q=${encodeURIComponent(q)}`);
+      const data = await r.json().catch(()=>({ results: [] }));
+      if (r.ok && Array.isArray(data.results)) setDdgResults(data.results);
+      else setDdgResults([]);
+    } catch { setDdgResults([]); }
+    finally { setDdgLoading(false); }
   };
 
   const runGlossary = (q: string) => {
@@ -149,11 +160,34 @@ export default function ResearchPage() {
           </div>
         </Card>
 
+        {/* DuckDuckGo live law search — Indian law biased, no API key needed */}
+        {(ddgLoading || ddgResults) && (
+          <Card className="p-4 bg-ink-900 text-ink-100 border-ink-900">
+            <div className="flex items-center justify-between">
+              <div className="text-xs uppercase tracking-wide text-brass-300">DuckDuckGo — live web (Indian law)</div>
+              <a href={`https://duckduckgo.com/?q=${encodeURIComponent(`Indian law ${query}`)}`} target="_blank" rel="noopener noreferrer" className="text-xs text-brass-200 hover:text-white">Open on DDG →</a>
+            </div>
+            {ddgLoading ? <p className="text-sm text-ink-400 mt-2">Searching DuckDuckGo…</p> :
+              ddgResults && ddgResults.length > 0 ? (
+                <ul className="mt-3 space-y-2">
+                  {ddgResults.map(r=>(
+                    <li key={r.id} className="bg-ink-800 rounded-md p-3">
+                      <a href={(r as {url?:string}).url || (r as ResearchResult).citation} target="_blank" rel="noopener noreferrer" className="font-medium text-brass-200 hover:text-white text-sm">{r.title}</a>
+                      <p className="text-xs text-ink-400 mt-1 line-clamp-2">{r.snippet}</p>
+                      <div className="text-[11px] text-ink-500 mt-1">{r.citation?.slice(0,60)}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="text-sm text-ink-400 mt-2">No live DDG results — showing local Indian corpus below.</p>
+            }
+          </Card>
+        )}
+
         {results === null ? (
           <Card className="p-10 text-center">
             <Scale className="w-8 h-8 text-ink-300 mx-auto mb-3" />
             <p className="font-display text-lg text-ink-700">Search a legal issue</p>
-            <p className="text-sm text-ink-400 mt-1">Results are matched against a small demo corpus of Indian case law.</p>
+            <p className="text-sm text-ink-400 mt-1">Results are matched against a small demo corpus of Indian case law. DuckDuckGo results appear above when available.</p>
           </Card>
         ) : results.length === 0 ? (
           <Card className="p-8 text-center text-sm text-ink-400">No matching authorities for &ldquo;{query}&rdquo;. Try a broader term.</Card>
