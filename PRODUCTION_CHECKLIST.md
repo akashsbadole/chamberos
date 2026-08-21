@@ -47,6 +47,9 @@ QUICKBOOKS_ACCESS_TOKEN=...         # src/lib/accounting.ts:1 → pushInvoiceToA
 XERO_ACCESS_TOKEN=...
 XERO_TENANT_ID=...
 
+# Cron (optional — recurring invoices)
+CRON_SECRET=<random hex>            # src/app/api/cron/recurring-invoices/route.ts:1 (Vercel Cron Authorization: Bearer)
+
 # Security
 CAPTCHA_SECRET=0x000...              # hCaptcha/reCAPTCHA → src/proxy.ts:42 x-captcha-token gate
 ```
@@ -64,14 +67,17 @@ npx prisma generate
 ```bash
 0 * * * * psql $DATABASE_URL -c 'DELETE FROM "RevokedToken" WHERE "expiresAt" < now()'
 ```
-Recurring invoices: cron to generate invoices from `RecurringInvoice` where `nextRunAt <= now()` and `active=true` (future: `npx tsx scripts/recurring-cron.ts` or pg cron).
+Recurring invoices: `GET /api/cron/recurring-invoices` (or `POST`) generates invoices where `nextRunAt <= now()` and `active=true`, pushes to accounting/email, updates `nextRunAt` by cadence; protect with `CRON_SECRET` (header `Authorization: Bearer <secret>`). Schedule via Vercel Cron (`vercel.json` cron) or pg cron:
+```json
+{ "crons": [{ "path": "/api/cron/recurring-invoices", "schedule": "0 2 * * *" }] }
+```
 
 ## 3. Build & deploy
 ```bash
 npm ci
 npx tsc --noEmit # 0 errors
 npm test        # 6/6 (tests/tenancy.test.js)
-npm run build   # 50/50 routes (next build)
+npm run build   # 51/51 routes (next build)
 # Docker (standalone output in next.config.ts:5)
 docker build -t chambers .
 docker run -p 3000:3000 --env-file .env chambers

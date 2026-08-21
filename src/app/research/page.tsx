@@ -55,6 +55,7 @@ export default function ResearchPage() {
       />
 
       <div className="px-4 sm:px-8 pb-16 space-y-5">
+        <Card className="p-3 bg-ink-50 text-xs text-ink-500">Provider: AI (local) with <code className="font-mono">WESTLAW_API_KEY</code>/<code className="font-mono">LEXISNEXIS_API_KEY</code>/<code className="font-mono">FASTCASE_API_KEY</code> hooks → <code className="font-mono">src/lib/legal-research.ts:1</code> (first-party fallback when keys not set).</Card>
         <div className="flex gap-1 border-b border-ink-100">
           <button
             onClick={() => setMode("caselaw")}

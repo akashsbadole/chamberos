@@ -122,6 +122,11 @@ export default function ReportsPage(){
           <div className="bg-ink-800 rounded p-3"><div className="text-brass-200 font-medium">Research: Westlaw / LexisNexis</div><div className="text-ink-400 mt-1">Set <code>WESTLAW_*</code>, <code>LEXISNEXIS_*</code> — AI research works without them.</div></div>
           <div className="bg-ink-800 rounded p-3"><div className="text-brass-200 font-medium">Accounting: QuickBooks / Xero</div><div className="text-ink-400 mt-1">Set <code>QUICKBOOKS_*</code>, <code>XERO_*</code> — invoices push when configured.</div></div>
         </div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <button onClick={async()=>{ const r=await fetch("/api/cron/recurring-invoices"); const d=await r.json().catch(()=>({})); alert(r.ok ? `Recurring cron: ${d.created} created of ${d.evaluated} evaluated` : d.error||"Failed"); }} className="focus-ring text-xs bg-brass-500 hover:bg-brass-600 text-white rounded-md px-3 py-1.5">Run recurring cron now</button>
+          <a href="/api/events/ics" className="focus-ring text-xs bg-ink-700 hover:bg-ink-600 text-white rounded-md px-3 py-1.5">Download calendar .ics</a>
+        </div>
+        <p className="text-[11px] text-ink-400 mt-2">Cron: <code className="font-mono">GET /api/cron/recurring-invoices</code> (add <code>CRON_SECRET</code> header for Vercel Cron) — generates invoices where <code>nextRunAt ≤ now</code> and pushes to accounting/email.</p>
       </Card>
     </div>
   </Shell>;
