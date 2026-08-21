@@ -44,6 +44,15 @@ export async function POST(req: NextRequest) {
   const apiKey = decryptSecret(firm.aiApiKeyCiphertext, firm.aiApiKeyIv);
   const provider = firm.aiProvider;
   const model = firm.aiModel || undefined;
+  // Daily quota per firm (prod: move to Redis/DB)
+  const quota = (globalThis as unknown as { __aiQuota?: Map<string, { count: number; reset: number }> }).__aiQuota ?? ((globalThis as unknown as { __aiQuota: Map<string, { count: number; reset: number }> }).__aiQuota = new Map());
+  const now = Date.now();
+  const entry = quota.get(firmId);
+  if (!entry || now > entry.reset) quota.set(firmId, { count: 1, reset: now + 24*60*60*1000 });
+  else {
+    if (entry.count >= 100) return NextResponse.json({ error: "AI daily quota exceeded (100/day). Contact admin." }, { status: 429 });
+    entry.count++;
+  }
   // Audit AI usage (counted for quota visibility even when provider call fails)
   await recordAuditEvent({ firmId, userId: auth.session.userId, action: "ai_inference", detail: `AI ${provider} call (${messages.length} msgs)` });
 

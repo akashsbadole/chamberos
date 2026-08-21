@@ -273,6 +273,14 @@ model ResearchQuestion {
   @@index([caseId])
 }
 
+model RevokedToken {
+  tokenHash String   @id
+  revokedAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
 // Hash-chained, append-only. Each row's `hash` = sha256(prevHash + firmId +
 // action + detail + timestamp); prevHash is the previous row's hash for the
 // same firm (see src/lib/audit.ts for the insert logic). Verifying the chain

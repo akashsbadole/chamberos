@@ -9,7 +9,21 @@ import crypto from "crypto";
 function getKey(): Buffer {
   const raw = process.env.AI_ENCRYPTION_KEY;
   if (!raw) throw new Error("AI_ENCRYPTION_KEY is not set");
-  // Accept any length input, derive a stable 32-byte key from it.
+  const salt = "chambers-pii-v1";
+  const info = "chambers-aes-256-gcm";
+  try {
+    // HKDF-SHA256 is the proper KDF (vs simple hash); Node 15+ has hkdfSync
+    // In production this `raw` would come from KMS, not env.
+    return Buffer.from(crypto.hkdfSync("sha256", Buffer.from(raw, "utf-8"), Buffer.from(salt), Buffer.from(info), 32));
+  } catch {
+    // Fallback for older Node or if hkdfSync unavailable
+    return crypto.pbkdf2Sync(raw, salt, 100000, 32, "sha256");
+  }
+}
+
+function getLegacyKey(): Buffer {
+  const raw = process.env.AI_ENCRYPTION_KEY;
+  if (!raw) throw new Error("AI_ENCRYPTION_KEY is not set");
   return crypto.createHash("sha256").update(raw).digest();
 }
 
@@ -27,14 +41,20 @@ export function encryptSecret(plaintext: string): { ciphertext: string; iv: stri
 }
 
 export function decryptSecret(ciphertext: string, iv: string): string {
-  const key = getKey();
-  const data = Buffer.from(ciphertext, "base64");
-  const authTag = data.subarray(data.length - 16);
-  const encrypted = data.subarray(0, data.length - 16);
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-  return decrypted.toString("utf8");
+  const tryDecrypt = (key: Buffer) => {
+    const data = Buffer.from(ciphertext, "base64");
+    const authTag = data.subarray(data.length - 16);
+    const encrypted = data.subarray(0, data.length - 16);
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64"));
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+  };
+  try {
+    return tryDecrypt(getKey());
+  } catch {
+    // Fallback to legacy sha256-derived key for rows encrypted before HKDF upgrade
+    return tryDecrypt(getLegacyKey());
+  }
 }
 
 // --- PII field-level encryption (reuses same key; stores as v1:<iv>:<ciphertext>) ---
