@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/api-helpers";
 import { query, queryOne } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 
-export async function PATCH(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
   if ("error" in auth) return auth.error;
   const { firmId, userId } = auth.session;
@@ -16,13 +16,38 @@ export async function PATCH(_req: Request, { params }: { params: Promise<{ id: s
   );
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const row = await queryOne(`UPDATE "ComplianceItem" SET done = NOT done WHERE id = $1 RETURNING *`, [id]);
+  let body: { label?: string; dueDate?: string; done?: boolean } = {};
+  try { body = await req.json(); } catch { body = {}; }
+  // If no explicit fields, toggle done (backward compat for existing UI)
+  if (body.label === undefined && body.dueDate === undefined && body.done === undefined) {
+    const row = await queryOne(`UPDATE "ComplianceItem" SET done = NOT done WHERE id = $1 RETURNING *`, [id]);
+    await recordAuditEvent({
+      firmId, userId,
+      action: !item.done ? "compliance_completed" : "compliance_reopened",
+      caseId: item.caseId, detail: `${!item.done ? "Completed" : "Reopened"}: ${item.label}`,
+    });
+    return NextResponse.json(row);
+  }
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+  if (body.label !== undefined) {
+    if (!String(body.label).trim()) return NextResponse.json({ error: "label required" }, { status: 400 });
+    fields.push(`label = $${++idx}`); values.push(String(body.label).trim());
+  }
+  if (body.dueDate !== undefined) {
+    const d = new Date(body.dueDate);
+    if (isNaN(d.getTime())) return NextResponse.json({ error: "invalid dueDate" }, { status: 400 });
+    fields.push(`"dueDate" = $${++idx}`); values.push(d.toISOString());
+  }
+  if (body.done !== undefined) { fields.push(`done = $${++idx}`); values.push(!!body.done); }
+  if (fields.length === 0) return NextResponse.json({ error: "No valid fields" }, { status: 400 });
+  const row = await queryOne(`UPDATE "ComplianceItem" SET ${fields.join(", ")} WHERE id = $1 RETURNING *`, [id, ...values]);
   await recordAuditEvent({
-    firmId,
-    userId,
-    action: item.done ? "compliance_reopened" : "compliance_completed",
+    firmId, userId,
+    action: "compliance_updated",
     caseId: item.caseId,
-    detail: `${item.done ? "Reopened" : "Completed"}: ${item.label}`,
+    detail: `Updated: ${body.label ?? item.label}`,
   });
   return NextResponse.json(row);
 }

@@ -5,11 +5,14 @@ import Shell from "@/components/Shell";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card } from "@/components/ui";
 import { useStore } from "@/lib/store";
-import { AlertTriangle, ArrowUpRight, CalendarClock, FileWarning, Sparkles, ShieldCheck } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CalendarClock, FileWarning, Sparkles, ShieldCheck, BarChart3 } from "lucide-react";
+import { BarChart } from "@/components/Charts";
+import { formatDate, formatDateTime } from "@/lib/format";
 
 export default function DashboardPage() {
   const { cases, clients, events, auditLog, ready } = useStore();
-  const { dict } = useLocale();
+  const { dict, locale } = useLocale();
+  const loc = locale === "en" ? "en-IN" : locale;
 
   if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
 
@@ -32,6 +35,13 @@ export default function DashboardPage() {
     { label: "Clients Onboarding", value: onboardingClients.length, href: "/onboarding" },
     { label: "Open Compliance Items", value: openCompliance.length, href: "/calendar" },
     { label: "Upcoming Hearings", value: events.filter((e) => e.type === "hearing" && new Date(e.start).getTime() > now).length, href: "/court-sync" },
+  ];
+
+  const mattersByStatus = [
+    { name: "Open", value: cases.filter(c=>c.status==="open").length },
+    { name: "Pending", value: cases.filter(c=>c.status==="pending_filing").length },
+    { name: "In Court", value: cases.filter(c=>c.status==="in_court").length },
+    { name: "Closed", value: cases.filter(c=>c.status==="closed").length },
   ];
 
   return (
@@ -74,10 +84,10 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-ink-700 font-mono">
-                      {new Date(e.start).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      {formatDate(e.start, loc)}
                     </div>
                     <div className="text-xs text-ink-400 font-mono">
-                      {new Date(e.start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                      {formatDateTime(e.start, loc)}
                     </div>
                   </div>
                 </li>
@@ -115,6 +125,14 @@ export default function DashboardPage() {
               })}
             </ul>
           )}
+        </Card>
+
+        <Card className="lg:col-span-2 p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="w-4 h-4 text-brass-500" />
+            <h2 className="font-display text-lg text-ink-900">Matters by status</h2>
+          </div>
+          <BarChart data={mattersByStatus} label="Matters by status" />
         </Card>
 
         <Card className="lg:col-span-2 p-6">

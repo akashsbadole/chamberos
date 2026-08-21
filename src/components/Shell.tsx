@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -70,13 +70,51 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
   );
 }
 
+function Breadcrumbs({ pathname }: { pathname: string }) {
+  const parts = pathname.split("/").filter(Boolean);
+  if (!parts.length) return null;
+  return (
+    <nav aria-label="Breadcrumb" className="px-4 sm:px-6 py-2 text-xs text-ink-400">
+      <ol className="flex gap-1">
+        <li><Link href="/" className="hover:text-ink-600">Home</Link> <span aria-hidden>›</span></li>
+        {parts.map((p, i) => {
+          const href = "/" + parts.slice(0, i+1).join("/");
+          const isLast = i === parts.length - 1;
+          return <li key={href} className="flex gap-1">{isLast ? <span aria-current="page" className="text-ink-600 capitalize">{p}</span> : <><Link href={href} className="hover:text-ink-600 capitalize">{p}</Link><span aria-hidden>›</span></>}</li>;
+        })}
+      </ol>
+    </nav>
+  );
+}
+
 export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { dict } = useLocale();
+  const drawerRef = useRef<HTMLElement | null>(null);
+
+  // Focus trap for mobile drawer + Esc to close
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const el = drawerRef.current;
+    const focusable = el?.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    focusable?.[0]?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileOpen(false);
+      if (e.key === "Tab" && focusable && focusable.length) {
+        const first = focusable[0], last = focusable[focusable.length-1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
 
   return (
     <div className="min-h-screen flex bg-paper text-ink-900">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 bg-ink-900 text-white px-3 py-2 rounded text-sm z-50">Skip to content</a>
+      <div id="a11y-live" aria-live="polite" aria-atomic="true" className="sr-only" />
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 bg-ink-900 text-ink-100 flex-col" aria-label="Main navigation">
         <div className="flex items-center gap-2 px-5 py-5 border-b border-ink-700">
@@ -99,6 +137,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         <div className="lg:hidden fixed inset-0 z-40 flex">
           <div className="fixed inset-0 bg-ink-950/60" onClick={() => setMobileOpen(false)} aria-hidden="true" />
           <aside
+            ref={drawerRef as unknown as React.RefObject<HTMLElement>}
             className="relative w-72 max-w-[85vw] bg-ink-900 text-ink-100 flex flex-col z-50"
             aria-label="Main navigation"
           >
@@ -140,6 +179,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        <Breadcrumbs pathname={pathname} />
         <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 overflow-y-auto focus:outline-none">
           {children}
         </main>

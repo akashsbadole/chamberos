@@ -10,6 +10,24 @@ const COOKIE_NAME = "chambers_session";
 const PUBLIC_PATHS = ["/login", "/register"];
 const PUBLIC_API_PREFIXES = ["/api/auth/"];
 
+// --- Rate limiting (in-memory, per-instance; replace with Redis/Upstash for multi-instance) ---
+const rateBuckets = new Map<string, number[]>();
+function hitRateLimit(key: string, max: number, windowMs: number): boolean {
+  const now = Date.now();
+  const arr = rateBuckets.get(key) ?? [];
+  const recent = arr.filter((t) => now - t < windowMs);
+  recent.push(now);
+  rateBuckets.set(key, recent);
+  // lazy cleanup to avoid unbounded growth
+  if (rateBuckets.size > 5000) {
+    for (const [k, v] of rateBuckets) if (v.length === 0 || now - v[v.length - 1] > windowMs) rateBuckets.delete(k);
+  }
+  return recent.length > max;
+}
+function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+}
+
 function getSecret(): Uint8Array {
   return new TextEncoder().encode(process.env.AUTH_SECRET ?? "");
 }
@@ -17,8 +35,23 @@ function getSecret(): Uint8Array {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Rate limiting for sensitive endpoints
+  const ip = clientIp(req);
+  if (pathname === "/api/auth/login" || pathname === "/api/auth/register") {
+    if (hitRateLimit(`auth:${ip}`, 5, 60_000)) {
+      return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429, headers: { "Retry-After": "60" } });
+    }
+  }
+  if (pathname === "/api/ai") {
+    if (hitRateLimit(`ai:${ip}`, 20, 60_000)) {
+      return NextResponse.json({ error: "AI rate limit exceeded" }, { status: 429, headers: { "Retry-After": "60" } });
+    }
+  }
+
   if (PUBLIC_PATHS.includes(pathname) || PUBLIC_API_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    addSecurityHeaders(res);
+    return res;
   }
 
   // Let Next.js internals and static assets through untouched.
@@ -33,10 +66,20 @@ export async function proxy(req: NextRequest) {
 
   try {
     await jwtVerify(token, getSecret());
-    return NextResponse.next();
+    const res = NextResponse.next();
+    addSecurityHeaders(res);
+    return res;
   } catch {
     return redirectToLogin(req);
   }
+}
+
+function addSecurityHeaders(res: NextResponse) {
+  res.headers.set("X-Frame-Options", "DENY");
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  // CSP is intentionally permissive for Next dev; tighten in production via next.config
 }
 
 function redirectToLogin(req: NextRequest) {

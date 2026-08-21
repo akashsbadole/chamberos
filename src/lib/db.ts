@@ -30,3 +30,28 @@ export async function queryOne<T = unknown>(text: string, params: unknown[] = []
   const rows = await query<T>(text, params);
   return rows[0] ?? null;
 }
+
+export async function withTransaction<T>(fn: (client: { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>, queryOne: <U>(text: string, params?: unknown[]) => Promise<U | null> }) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tx = {
+      query: async (text: string, params: unknown[] = []) => {
+        const r = await client.query(text, params);
+        return r;
+      },
+      queryOne: async <U>(text: string, params: unknown[] = []): Promise<U | null> => {
+        const r = await client.query(text, params);
+        return (r.rows[0] as U) ?? null;
+      },
+    };
+    const result = await fn(tx as unknown as { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }>, queryOne: <U>(text: string, params?: unknown[]) => Promise<U | null> });
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw e;
+  } finally {
+    client.release();
+  }
+}

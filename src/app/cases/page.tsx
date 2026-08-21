@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import Shell from "@/components/Shell";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card, StatusBadge } from "@/components/ui";
@@ -10,9 +11,14 @@ import { FileText, Trash2 } from "lucide-react";
 export default function CasesPage() {
   const { cases, clients, ready, removeCase } = useStore();
   const { dict } = useLocale();
-  if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
-
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const pageSize = 10;
   const clientName = (id: string) => clients.find((c) => c.id === id)?.name ?? "Unknown client";
+  const filtered = cases.filter(c => !q || [c.title, c.caseNumber, c.practiceArea, clientName(c.clientId)].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const paged = filtered.slice(page*pageSize, (page+1)*pageSize);
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
 
   return (
     <Shell>
@@ -21,8 +27,12 @@ export default function CasesPage() {
         title={dict.pages.cases.title}
         description={dict.pages.cases.description}
       />
+      <div className="px-8 pb-2">
+        <input value={q} onChange={e=>{setQ(e.target.value); setPage(0);}} placeholder="Search matters…" className="focus-ring w-full max-w-md text-sm border border-ink-200 rounded-md px-3 py-2" />
+        <div className="text-xs text-ink-400 mt-1">{filtered.length} result(s) {filtered.length>pageSize && `· page ${page+1}/${pages}`}</div>
+      </div>
       <div className="px-8 pb-10 space-y-3">
-        {cases.map((c) => {
+        {paged.map((c) => {
           const openItems = c.compliance.filter((i) => !i.done).length;
           return (
             <Card key={c.id} className="p-5 hover:border-brass-300 transition-colors">
@@ -63,6 +73,7 @@ export default function CasesPage() {
             </Card>
           );
         })}
+        {pages>1 && <div className="flex justify-between pt-2 text-sm"><button disabled={page===0} onClick={()=>setPage(p=>p-1)} className="focus-ring border border-ink-200 rounded px-3 py-1 disabled:opacity-40">Prev</button><span className="text-ink-400">{page+1}/{pages}</span><button disabled={page+1>=pages} onClick={()=>setPage(p=>p+1)} className="focus-ring border border-ink-200 rounded px-3 py-1 disabled:opacity-40">Next</button></div>}
       </div>
     </Shell>
   );

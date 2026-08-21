@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-helpers";
 import { query, queryOne } from "@/lib/db";
+import { decryptPII, encryptPII } from "@/lib/server-crypto";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -12,14 +13,43 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await queryOne<{ id: string }>(`SELECT id FROM "Client" WHERE id = $1 AND "firmId" = $2`, [id, firmId]);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const fields = Object.keys(patch);
-  if (fields.length === 0) return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  const allowed = ["name", "email", "phone", "matterType", "status", "conflictChecked", "conflictFlags", "kycVerified", "engagementSigned", "notes"];
+  const fields = Object.keys(patch).filter((f) => allowed.includes(f));
+  if (fields.length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
+
+  // Basic validation
+  if (patch.email !== undefined && typeof patch.email === "string" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(patch.email)) {
+    return NextResponse.json({ error: "Invalid email" }, { status: 400 });
+  }
+  if (patch.status !== undefined && !["intake", "conflict_check", "kyc", "engagement", "active"].includes(patch.status)) {
+    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  }
+  if (patch.phone !== undefined && typeof patch.phone === "string" && patch.phone && !/^\+?[0-9\s\-()]{7,20}$/.test(patch.phone)) {
+    return NextResponse.json({ error: "Invalid phone" }, { status: 400 });
+  }
 
   const setClause = fields.map((f, i) => `"${f}" = $${i + 2}`).join(", ");
+  const values = fields.map((f) => {
+    const v = patch[f];
+    if (f === "notes" && typeof v === "string") return encryptPII(v);
+    if (f === "conflictFlags" && !Array.isArray(v)) return [];
+    return v;
+  });
   const row = await queryOne(
     `UPDATE "Client" SET ${setClause}, "updatedAt" = now() WHERE id = $1 RETURNING *`,
-    [id, ...fields.map((f) => patch[f])]
+    [id, ...values]
   );
+  return NextResponse.json(row);
+}
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireSession();
+  if ("error" in auth) return auth.error;
+  const { firmId } = auth.session;
+  const { id } = await params;
+  const row = await queryOne<Record<string, unknown>>(`SELECT * FROM "Client" WHERE id = $1 AND "firmId" = $2`, [id, firmId]);
+  if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (typeof row.notes === "string") row.notes = decryptPII(row.notes as string);
   return NextResponse.json(row);
 }
 

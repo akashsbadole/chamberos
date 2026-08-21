@@ -36,3 +36,26 @@ export function decryptSecret(ciphertext: string, iv: string): string {
   const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
   return decrypted.toString("utf8");
 }
+
+// --- PII field-level encryption (reuses same key; stores as v1:<iv>:<ciphertext>) ---
+const PII_PREFIX = "v1:";
+export function encryptPII(plaintext: string | null | undefined): string | null {
+  if (!plaintext) return plaintext as string | null;
+  // Don't double-encrypt
+  if (plaintext.startsWith(PII_PREFIX)) return plaintext;
+  const { ciphertext, iv } = encryptSecret(plaintext);
+  return `${PII_PREFIX}${iv}:${ciphertext}`;
+}
+export function decryptPII(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith(PII_PREFIX)) return value as string | null;
+  try {
+    const rest = value.slice(PII_PREFIX.length);
+    const sep = rest.indexOf(":");
+    if (sep === -1) return value;
+    const iv = rest.slice(0, sep);
+    const ciphertext = rest.slice(sep + 1);
+    return decryptSecret(ciphertext, iv);
+  } catch {
+    return value; // fallback to raw on decrypt failure (key rotation case)
+  }
+}

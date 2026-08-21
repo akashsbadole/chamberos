@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-helpers";
 import { queryOne } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
+import { encryptPII } from "@/lib/server-crypto";
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,10 +23,11 @@ export async function POST(req: NextRequest) {
     const validStatuses = ["intake", "conflict_check", "kyc", "engagement", "active"] as const;
     if (!validStatuses.includes(status)) return NextResponse.json({ error: `invalid status: ${status}` }, { status: 400 });
 
+    const encryptedNotes = notes ? encryptPII(String(notes)) : null;
     const row = await queryOne(
       `INSERT INTO "Client" (id, "firmId", name, email, phone, "matterType", status, "conflictChecked", "conflictFlags", "kycVerified", "engagementSigned", notes, "updatedAt")
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, now()) RETURNING *`,
-      [id, firmId, String(name).trim(), String(email).trim(), String(phone), String(matterType), status, !!conflictChecked, Array.isArray(conflictFlags) ? conflictFlags : [], !!kycVerified, !!engagementSigned, notes ?? null]
+      [id, firmId, String(name).trim(), String(email).trim(), String(phone), String(matterType), status, !!conflictChecked, Array.isArray(conflictFlags) ? conflictFlags : [], !!kycVerified, !!engagementSigned, encryptedNotes]
     );
 
     await recordAuditEvent({ firmId, userId, action: "client_onboarded", clientId: id, detail: `Client onboarded: ${name}` });

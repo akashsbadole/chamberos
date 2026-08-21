@@ -12,6 +12,12 @@ export default function ClientsPage() {
   const { clients, ready, removeClient } = useStore();
   const { dict } = useLocale();
   const [err, setErr] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
+  const pageSize = 10;
+  const filtered = clients.filter(c => !q || [c.name,c.email,c.phone,c.matterType].join(" ").toLowerCase().includes(q.toLowerCase()));
+  const paged = filtered.slice(page*pageSize, (page+1)*pageSize);
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
 
   return (
@@ -27,8 +33,12 @@ export default function ClientsPage() {
         }
       />
       {err && <div className="mx-8 mb-3 bg-rust-500/10 text-rust-700 text-sm rounded-md px-4 py-2 flex justify-between"><span>{err}</span><button onClick={() => setErr(null)} className="text-rust-500 ml-3">×</button></div>}
+      <div className="px-8 pb-2">
+        <input value={q} onChange={e=>{setQ(e.target.value); setPage(0);}} placeholder="Search clients…" className="focus-ring w-full max-w-md text-sm border border-ink-200 rounded-md px-3 py-2" />
+        <div className="text-xs text-ink-400 mt-1">{filtered.length} result(s) {filtered.length>pageSize && `· page ${page+1}/${pages}`}</div>
+      </div>
       <div className="px-8 pb-10 space-y-3">
-        {clients.map((c) => (
+        {paged.map((c) => (
           <Card key={c.id} className="p-5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
@@ -76,6 +86,7 @@ export default function ClientsPage() {
             )}
           </Card>
         ))}
+        {pages>1 && <div className="flex justify-between pt-2 text-sm"><button disabled={page===0} onClick={()=>setPage(p=>p-1)} className="focus-ring border border-ink-200 rounded px-3 py-1 disabled:opacity-40">Prev</button><span className="text-ink-400">{page+1}/{pages}</span><button disabled={page+1>=pages} onClick={()=>setPage(p=>p+1)} className="focus-ring border border-ink-200 rounded px-3 py-1 disabled:opacity-40">Next</button></div>}
       </div>
     </Shell>
   );

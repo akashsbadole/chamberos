@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-helpers";
 import { queryOne } from "@/lib/db";
 import { decryptSecret } from "@/lib/server-crypto";
+import { recordAuditEvent } from "@/lib/audit";
 
 // Server-side relay to a real LLM provider. The API key now lives
 // server-side only — encrypted in the Firm row, decrypted here for the
@@ -43,6 +44,8 @@ export async function POST(req: NextRequest) {
   const apiKey = decryptSecret(firm.aiApiKeyCiphertext, firm.aiApiKeyIv);
   const provider = firm.aiProvider;
   const model = firm.aiModel || undefined;
+  // Audit AI usage (counted for quota visibility even when provider call fails)
+  await recordAuditEvent({ firmId, userId: auth.session.userId, action: "ai_inference", detail: `AI ${provider} call (${messages.length} msgs)` });
 
   try {
     if (provider === "anthropic") {
