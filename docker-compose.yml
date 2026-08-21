@@ -1,0 +1,138 @@
+# Full self-hosted stack for a VPS deployment: the app + Postgres, plus
+# open-source tooling to manage it — a reverse proxy with automatic TLS
+# (Nginx Proxy Manager), a Docker management UI (Portainer), a database UI
+# (Adminer), uptime monitoring (Uptime Kuma), automated backups, and
+# optional auto-updates for the ancillary tools (Watchtower). See
+# DEPLOYMENT.md for the full step-by-step walkthrough.
+#
+# Usage:
+#   cp .env.example .env   # fill in real values — see comments in that file
+#   docker compose up -d --build
+#
+# Nothing here publishes a host port except Nginx Proxy Manager (80/443 for
+# real traffic, 81 for its own admin UI) — every other service is reached
+# through it via subdomains you configure after first boot (see
+# DEPLOYMENT.md step 6).
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks: [chambers_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public"
+      AUTH_SECRET: ${AUTH_SECRET}
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY}
+      NODE_ENV: production
+    networks: [chambers_net]
+    # Deliberately no `ports:` — only reachable inside the Docker network,
+    # via the npm (Nginx Proxy Manager) service, which is the only thing
+    # that talks to the internet.
+
+  # Nightly Postgres backups to ./backups on the host, with rotation.
+  # Open source: https://github.com/prodrigestivill/docker-postgres-backup-local
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+    volumes:
+      - ./backups:/backups
+    networks: [chambers_net]
+
+  # Lightweight Postgres admin UI — https://www.adminer.org/
+  adminer:
+    image: adminer:4
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    networks: [chambers_net]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Docker management UI — https://www.portainer.io/ (Community Edition, OSS)
+  portainer:
+    image: portainer/portainer-ce:lts
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks: [chambers_net]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Uptime monitoring with alerting — https://github.com/louislam/uptime-kuma
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - uptime_kuma_data:/app/data
+    networks: [chambers_net]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Reverse proxy + automatic Let's Encrypt TLS, with a web UI instead of
+  # hand-editing nginx.conf — https://nginxproxymanager.com/
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81" # admin UI — firewall this to your IP or tunnel via SSH, see DEPLOYMENT.md
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks: [chambers_net]
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Auto-updates ancillary tool images (NOT the app or db — those you update
+  # deliberately via `git pull` + rebuild, so a bad upstream image can't
+  # silently break your production app). https://containrrr.dev/watchtower/
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --schedule "0 0 4 * * *"
+    networks: [chambers_net]
+
+networks:
+  chambers_net:
+    driver: bridge
+
+volumes:
+  db_data:
+  npm_data:
+  npm_letsencrypt:
+  portainer_data:
+  uptime_kuma_data:

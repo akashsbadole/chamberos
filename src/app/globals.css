@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f8f6f1;
+  --foreground: #14181f;
+
+  --color-ink-50: #f5f6f8;
+  --color-ink-100: #e8eaee;
+  --color-ink-200: #c7ccd6;
+  --color-ink-300: #a1a9ba;
+  --color-ink-400: #707c94;
+  --color-ink-500: #4d5871;
+  --color-ink-600: #39435a;
+  --color-ink-700: #2a3245;
+  --color-ink-800: #1a2032;
+  --color-ink-900: #0f131f;
+  --color-ink-950: #080a12;
+
+  --color-brass-50: #faf6ee;
+  --color-brass-100: #f2e8d3;
+  --color-brass-200: #e3cd9f;
+  --color-brass-300: #d4b06e;
+  --color-brass-400: #c4964a;
+  --color-brass-500: #a97c37;
+  --color-brass-600: #8a622c;
+  --color-brass-700: #6b4a22;
+
+  --color-paper: #f8f6f1;
+
+  --color-moss-500: #5c7457;
+  --color-moss-600: #46593f;
+  --color-rust-500: #b1503a;
+  --color-rust-600: #8c3e2c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-ink-50: var(--color-ink-50);
+  --color-ink-100: var(--color-ink-100);
+  --color-ink-200: var(--color-ink-200);
+  --color-ink-300: var(--color-ink-300);
+  --color-ink-400: var(--color-ink-400);
+  --color-ink-500: var(--color-ink-500);
+  --color-ink-600: var(--color-ink-600);
+  --color-ink-700: var(--color-ink-700);
+  --color-ink-800: var(--color-ink-800);
+  --color-ink-900: var(--color-ink-900);
+  --color-ink-950: var(--color-ink-950);
+
+  --color-brass-50: var(--color-brass-50);
+  --color-brass-100: var(--color-brass-100);
+  --color-brass-200: var(--color-brass-200);
+  --color-brass-300: var(--color-brass-300);
+  --color-brass-400: var(--color-brass-400);
+  --color-brass-500: var(--color-brass-500);
+  --color-brass-600: var(--color-brass-600);
+  --color-brass-700: var(--color-brass-700);
+
+  --color-paper: var(--color-paper);
+  --color-moss-500: var(--color-moss-500);
+  --color-moss-600: var(--color-moss-600);
+  --color-rust-500: var(--color-rust-500);
+  --color-rust-600: var(--color-rust-600);
+
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "URW Palladio L", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink-900);
+  font-family: var(--font-body), sans-serif;
+}
+
+::selection {
+  background: var(--color-brass-200);
+}
+
+.font-display {
+  font-family: var(--font-display), serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-brass-500);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-200);
+  border-radius: 4px;
+}
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  background: var(--color-brass-500);
+  color: white;
+  padding: 0.5rem 1rem;
+  z-index: 100;
+  border-radius: 0 0 6px 0;
+}
+.skip-link:focus {
+  left: 0;
+}

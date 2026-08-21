@@ -1,0 +1,299 @@
+// Postgres schema for Chambers, backing the app via Prisma.
+// Provisioned and migrated against a real local Postgres 16 instance during
+// development of this schema (see PRODUCTION_READINESS.md for what still
+// changes before a real multi-tenant deploy: managed Postgres, KMS-backed
+// encryption key instead of an env var, connection pooling for serverless).
+//
+// Key differences from the original client-only prototype, on purpose:
+//  - Every tenant-scoped table carries a firmId; every query in the app
+//    layer must filter by the authenticated session's firmId — see
+//    src/lib/auth.ts and src/lib/db-scope.ts.
+//  - Client-side arrays (compliance[], documents[], actionItems[]) are real
+//    child tables with foreign keys, not JSON blobs.
+//  - AI provider credentials live on Firm, encrypted at rest with
+//    AES-GCM (src/lib/server-crypto.ts) using a server-only key — never
+//    sent to or stored by the browser.
+//  - AuditEvent rows are hash-chained (prevHash/hash) at insert time so
+//    tampering with history is detectable, not just discouraged.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Tenancy & auth ----------------------------------------------------------
+
+model Firm {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // Server-managed AI provider config — set on the Settings page by an
+  // ADMIN, stored encrypted, decrypted only inside the /api/ai route.
+  aiProvider          String? // "anthropic" | "openai" | "google"
+  aiModel             String?
+  aiApiKeyCiphertext  String? // AES-GCM ciphertext, base64
+  aiApiKeyIv          String? // AES-GCM iv, base64
+
+  users     User[]
+  clients   Client[]
+  cases     LegalCase[]
+  events    CalendarEvent[]
+  auditLog  AuditEvent[]
+}
+
+enum Role {
+  ADMIN
+  LAWYER
+  PARALEGAL
+  CLIENT
+}
+
+model User {
+  id           String   @id @default(cuid())
+  firmId       String
+  firm         Firm     @relation(fields: [firmId], references: [id])
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(LAWYER)
+  createdAt    DateTime @default(now())
+
+  timeEntries  TimeEntry[]
+  auditLog     AuditEvent[]
+
+  @@index([firmId])
+}
+
+// --- Core domain -------------------------------------------------------------
+
+enum ClientStatus {
+  intake
+  conflict_check
+  kyc
+  engagement
+  active
+}
+
+model Client {
+  id               String       @id @default(cuid())
+  firmId           String
+  firm             Firm         @relation(fields: [firmId], references: [id])
+  name             String
+  email            String
+  phone            String
+  matterType       String
+  status           ClientStatus @default(intake)
+  conflictChecked  Boolean      @default(false)
+  conflictFlags    String[]
+  kycVerified      Boolean      @default(false)
+  engagementSigned Boolean      @default(false)
+  notes            String?      // consider field-level encryption
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  cases       LegalCase[]
+  grievances  Grievance[]
+
+  @@index([firmId])
+}
+
+enum CaseStatus {
+  open
+  pending_filing
+  in_court
+  closed
+}
+
+model LegalCase {
+  id             String     @id @default(cuid())
+  firmId         String
+  firm           Firm       @relation(fields: [firmId], references: [id])
+  clientId       String?
+  client         Client?    @relation(fields: [clientId], references: [id])
+  title          String
+  practiceArea   String
+  status         CaseStatus @default(open)
+  courtName      String?
+  caseNumber     String?
+  nextHearing    DateTime?
+  filingDeadline DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  compliance        ComplianceItem[]
+  documents         CaseDocument[]
+  events            CalendarEvent[]
+  chats             ChatMessage[]
+  meetingNotes      MeetingNote[]
+  timeEntries       TimeEntry[]
+  evidence          Evidence[]
+  grievances        Grievance[]
+  researchQuestions ResearchQuestion[]
+
+  @@index([firmId])
+  @@index([clientId])
+}
+
+model ComplianceItem {
+  id        String    @id @default(cuid())
+  caseId    String
+  case      LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  label     String
+  dueDate   DateTime
+  done      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([caseId])
+}
+
+model CaseDocument {
+  id         String    @id @default(cuid())
+  caseId     String
+  case       LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  name       String
+  content    String    // consider field-level encryption or object storage + pointer
+  uploadedAt DateTime  @default(now())
+
+  @@index([caseId])
+}
+
+enum CalendarEventType {
+  hearing
+  meeting
+  deadline
+  internal
+}
+
+model CalendarEvent {
+  id       String            @id @default(cuid())
+  firmId   String
+  firm     Firm              @relation(fields: [firmId], references: [id])
+  caseId   String?
+  case     LegalCase?        @relation(fields: [caseId], references: [id])
+  title    String
+  start    DateTime
+  end      DateTime
+  type     CalendarEventType
+  location String?
+
+  @@index([firmId])
+  @@index([caseId])
+  @@index([start])
+}
+
+model ChatMessage {
+  id        String    @id @default(cuid())
+  caseId    String
+  case      LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  role      String    // "user" | "assistant"
+  content   String
+  timestamp DateTime  @default(now())
+
+  @@index([caseId])
+}
+
+model MeetingNote {
+  id          String    @id @default(cuid())
+  caseId      String
+  case        LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title       String
+  recordedAt  DateTime  @default(now())
+  transcript  String    // consider field-level encryption
+  summary     String
+  actionItems String[]
+
+  @@index([caseId])
+}
+
+model TimeEntry {
+  id          String    @id @default(cuid())
+  caseId      String
+  case        LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id])
+  description String
+  minutes     Int
+  rate        Decimal   @db.Decimal(10, 2)
+  billed      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  @@index([caseId])
+}
+
+model Evidence {
+  id            String    @id @default(cuid())
+  caseId        String
+  case          LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  label         String
+  source        String?
+  description   String?
+  collectedDate DateTime
+  addedAt       DateTime  @default(now())
+  kind          String    // "document" | "photo" | "scan" | "other"
+  content       String?   // consider object storage (S3-compatible) + pointer instead of inline text
+
+  @@index([caseId])
+}
+
+enum GrievanceStatus {
+  open
+  acknowledged
+  resolved
+}
+
+model Grievance {
+  id          String          @id @default(cuid())
+  clientId    String
+  client      Client          @relation(fields: [clientId], references: [id])
+  caseId      String?
+  case        LegalCase?      @relation(fields: [caseId], references: [id])
+  subject     String
+  message     String
+  status      GrievanceStatus @default(open)
+  submittedAt DateTime        @default(now())
+
+  @@index([clientId])
+  @@index([caseId])
+}
+
+model ResearchQuestion {
+  id       String    @id @default(cuid())
+  caseId   String
+  case     LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  question String
+  reason   String
+  answered Boolean   @default(false)
+  answer   String?
+
+  @@index([caseId])
+}
+
+// Hash-chained, append-only. Each row's `hash` = sha256(prevHash + firmId +
+// action + detail + timestamp); prevHash is the previous row's hash for the
+// same firm (see src/lib/audit.ts for the insert logic). Verifying the chain
+// end-to-end detects any row that was altered or deleted out of band — a
+// database trigger additionally rejects UPDATE/DELETE on this table (see
+// prisma/migrations, the trigger is added via raw SQL since Prisma's schema
+// language can't express it).
+model AuditEvent {
+  id        String   @id @default(cuid())
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  timestamp DateTime @default(now())
+  action    String
+  caseId    String?
+  clientId  String?
+  detail    String
+  prevHash  String?
+  hash      String
+
+  @@index([firmId])
+  @@index([timestamp])
+}
