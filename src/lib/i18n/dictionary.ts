@@ -21,6 +21,11 @@ export interface Dictionary {
     portal: string;
     activity: string;
     settings: string;
+    documents: string;
+    templates: string;
+    trust: string;
+    messages: string;
+    reports: string;
   };
   common: {
     loading: string;
@@ -73,6 +78,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "Calendar", courtSync: "eCourts Sync", voiceIntake: "Voice Intake",
       research: "Research & Glossary", billing: "Time & Billing", assistant: "AI Assistant",
       portal: "Client Portal", activity: "Activity Log", settings: "Settings",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "Loading…", save: "Save", cancel: "Cancel", continue: "Continue", back: "Back",
@@ -108,6 +114,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "कैलेंडर", courtSync: "ईकोर्ट्स सिंक", voiceIntake: "वॉइस इनटेक",
       research: "शोध और शब्दावली", billing: "समय और बिलिंग", assistant: "एआई सहायक",
       portal: "क्लाइंट पोर्टल", activity: "गतिविधि लॉग", settings: "सेटिंग्स",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "लोड हो रहा है…", save: "सहेजें", cancel: "रद्द करें", continue: "जारी रखें", back: "वापस",
@@ -143,6 +150,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "दिनदर्शिका", courtSync: "ईकोर्ट्स समक्रमण", voiceIntake: "आवाज नोंदणी",
       research: "संशोधन आणि शब्दकोश", billing: "वेळ आणि देयक", assistant: "एआय सहाय्यक",
       portal: "क्लायंट पोर्टल", activity: "क्रियाकलाप नोंद", settings: "सेटिंग्ज",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "लोड होत आहे…", save: "जतन करा", cancel: "रद्द करा", continue: "पुढे चला", back: "मागे",
@@ -178,6 +186,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "క్యాలెండర్", courtSync: "ఈకోర్ట్స్ సింక్", voiceIntake: "వాయిస్ ఇన్‌టేక్",
       research: "పరిశోధన & పదకోశం", billing: "సమయం & బిల్లింగ్", assistant: "AI సహాయకుడు",
       portal: "క్లయింట్ పోర్టల్", activity: "కార్యాచరణ లాగ్", settings: "సెట్టింగ్‌లు",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "లోడ్ అవుతోంది…", save: "సేవ్ చేయండి", cancel: "రద్దు చేయండి", continue: "కొనసాగించండి", back: "వెనుకకు",
@@ -213,6 +222,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "நாட்காட்டி", courtSync: "ஈகோர்ட்ஸ் ஒத்திசைவு", voiceIntake: "குரல் உள்ளீடு",
       research: "ஆராய்ச்சி & சொற்களஞ்சியம்", billing: "நேரம் & பில்லிங்", assistant: "AI உதவியாளர்",
       portal: "வாடிக்கையாளர் போர்டல்", activity: "செயல்பாட்டு பதிவு", settings: "அமைப்புகள்",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "ஏற்றுகிறது…", save: "சேமி", cancel: "ரத்துசெய்", continue: "தொடரவும்", back: "பின்செல்",
@@ -248,6 +258,7 @@ export const DICTIONARIES: Record<Locale, Dictionary> = {
       calendar: "ক্যালেন্ডার", courtSync: "ইকোর্টস সিঙ্ক", voiceIntake: "ভয়েস ইনটেক",
       research: "গবেষণা ও শব্দকোষ", billing: "সময় ও বিলিং", assistant: "এআই সহায়ক",
       portal: "ক্লায়েন্ট পোর্টাল", activity: "কার্যকলাপ লগ", settings: "সেটিংস",
+      documents: "Documents", templates: "Templates", trust: "Trust Accounting", messages: "Messages", reports: "Reports",
     },
     common: {
       loading: "লোড হচ্ছে…", save: "সংরক্ষণ করুন", cancel: "বাতিল করুন", continue: "চালিয়ে যান", back: "ফিরে যান",

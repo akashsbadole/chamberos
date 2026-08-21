@@ -25,6 +25,8 @@ import {
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { Dictionary } from "@/lib/i18n/dictionary";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { allowedNav, AppRole } from "@/lib/rbac";
+import { FileText, Landmark as TemplateIcon, Wallet, MessageSquare, BarChart3 } from "lucide-react";
 
 function buildNav(nav: Dictionary["nav"]) {
   return [
@@ -41,12 +43,26 @@ function buildNav(nav: Dictionary["nav"]) {
     { href: "/portal", label: nav.portal, icon: Heart },
     { href: "/activity", label: nav.activity, icon: ShieldCheck },
     { href: "/settings", label: nav.settings, icon: Settings },
+    // New tools — visible per RBAC (Phase A-F)
+    { href: "/documents", label: nav.documents, icon: FileText },
+    { href: "/templates", label: nav.templates, icon: TemplateIcon },
+    { href: "/trust", label: nav.trust, icon: Wallet },
+    { href: "/messages", label: nav.messages, icon: MessageSquare },
+    { href: "/reports", label: nav.reports, icon: BarChart3 },
   ];
 }
 
-function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function useRole(): AppRole | null {
+  const [role, setRole] = useState<AppRole | null>(null);
+  useEffect(() => {
+    fetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=>{ if(d?.role) setRole(d.role as AppRole); }).catch(()=>{});
+  }, []);
+  return role;
+}
+
+function NavLinks({ pathname, role, onNavigate }: { pathname: string; role: AppRole | null; onNavigate?: () => void }) {
   const { dict } = useLocale();
-  const NAV = buildNav(dict.nav);
+  const NAV = buildNav(dict.nav).filter(item => role ? allowedNav(role, item.href) : true);
   return (
     <>
       {NAV.map(({ href, label, icon: Icon }) => {
@@ -91,6 +107,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { dict } = useLocale();
+  const role = useRole();
   const drawerRef = useRef<HTMLElement | null>(null);
 
   // Focus trap for mobile drawer + Esc to close
@@ -125,9 +142,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} role={role} />
         </nav>
-        <div className="px-4 py-4 border-t border-ink-700 text-xs text-ink-400">
+        <div className="px-4 py-4 border-t border-ink-700 text-xs text-ink-400 space-y-2">
+          {role && <div className="text-[11px] tracking-wide uppercase text-brass-300">Role: {role}</div>}
           <p className="leading-relaxed">{dict.common.demoNotice}</p>
         </div>
       </aside>
@@ -151,7 +169,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-              <NavLinks pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+              <NavLinks pathname={pathname} role={role} onNavigate={() => setMobileOpen(false)} />
             </nav>
           </aside>
         </div>

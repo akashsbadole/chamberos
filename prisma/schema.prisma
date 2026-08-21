@@ -39,11 +39,17 @@ model Firm {
   aiApiKeyCiphertext  String? // AES-GCM ciphertext, base64
   aiApiKeyIv          String? // AES-GCM iv, base64
 
-  users     User[]
-  clients   Client[]
-  cases     LegalCase[]
-  events    CalendarEvent[]
-  auditLog  AuditEvent[]
+  users             User[]
+  clients           Client[]
+  cases             LegalCase[]
+  events            CalendarEvent[]
+  auditLog          AuditEvent[]
+  templates         DocumentTemplate[]
+  signatureRequests SignatureRequest[]
+  invoices          Invoice[]
+  payments          Payment[]
+  messageThreads    MessageThread[]
+  trustAccounts     TrustAccount[]
 }
 
 enum Role {
@@ -170,16 +176,18 @@ enum CalendarEventType {
 }
 
 model CalendarEvent {
-  id       String            @id @default(cuid())
-  firmId   String
-  firm     Firm              @relation(fields: [firmId], references: [id])
-  caseId   String?
-  case     LegalCase?        @relation(fields: [caseId], references: [id])
-  title    String
-  start    DateTime
-  end      DateTime
-  type     CalendarEventType
-  location String?
+  id          String            @id @default(cuid())
+  firmId      String
+  firm        Firm              @relation(fields: [firmId], references: [id])
+  caseId      String?
+  case        LegalCase?        @relation(fields: [caseId], references: [id])
+  title       String
+  start       DateTime
+  end         DateTime
+  type        CalendarEventType
+  location    String?
+  meetingLink String?
+  description String?
 
   @@index([firmId])
   @@index([caseId])
@@ -219,6 +227,7 @@ model TimeEntry {
   description String
   minutes     Int
   rate        Decimal   @db.Decimal(10, 2)
+  costRate    Decimal?  @db.Decimal(10, 2)
   billed      Boolean   @default(false)
   createdAt   DateTime  @default(now())
 
@@ -304,4 +313,146 @@ model AuditEvent {
 
   @@index([firmId])
   @@index([timestamp])
+}
+
+// --- Document & Workflow -----------------------------------------------------
+
+model DocumentTemplate {
+  id        String   @id @default(cuid())
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  name      String
+  category  String   // contract | pleading | letter | other
+  body      String   // merge fields: {{client.name}}, {{case.title}}, {{date}}
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([firmId])
+}
+
+model SignatureRequest {
+  id            String    @id @default(cuid())
+  firmId        String
+  firm          Firm      @relation(fields: [firmId], references: [id])
+  documentId    String    // CaseDocument id (or standalone doc id)
+  documentName  String?
+  signerName    String
+  signerEmail   String
+  status        String    @default("pending") // pending | signed | declined
+  token         String    @unique
+  signatureData String?   // base64 data URL or typed name
+  signedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([firmId])
+  @@index([documentId])
+  @@index([token])
+}
+
+// --- Billing & Payments ------------------------------------------------------
+
+model Invoice {
+  id         String   @id @default(cuid())
+  firmId     String
+  firm       Firm     @relation(fields: [firmId], references: [id])
+  caseId     String?
+  clientId   String?
+  number     String   // INV-2026-0001
+  status     String   @default("draft") // draft | sent | paid | void
+  lineItems  Json     // [{description, minutes, rate, amount}]
+  subtotal   Decimal  @db.Decimal(12, 2)
+  taxRate    Decimal? @db.Decimal(5, 2)
+  total      Decimal  @db.Decimal(12, 2)
+  dueDate    DateTime?
+  pdfKey     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([firmId])
+  @@index([caseId])
+  @@index([clientId])
+  @@index([status])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  invoiceId String?
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id])
+  amount    Decimal  @db.Decimal(12, 2)
+  method    String   // stripe | paypal | upi | cash | trust
+  status    String   @default("pending") // pending | succeeded | failed
+  gatewayRef String?
+  createdAt DateTime @default(now())
+
+  @@index([firmId])
+  @@index([invoiceId])
+}
+
+// --- Communication -----------------------------------------------------------
+
+model MessageThread {
+  id        String    @id @default(cuid())
+  firmId    String
+  firm      Firm      @relation(fields: [firmId], references: [id])
+  clientId  String
+  caseId    String?
+  subject   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages Message[]
+
+  @@index([firmId])
+  @@index([clientId])
+  @@index([caseId])
+}
+
+model Message {
+  id        String        @id @default(cuid())
+  threadId  String
+  thread    MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender    String        // firm | client
+  senderId  String?
+  body      String
+  readAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([threadId])
+}
+
+// --- Trust Accounting (IOLTA) ------------------------------------------------
+
+model TrustAccount {
+  id        String   @id @default(cuid())
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id])
+  clientId  String
+  balance   Decimal  @db.Decimal(12, 2) @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions TrustTransaction[]
+
+  @@unique([firmId, clientId])
+  @@index([firmId])
+}
+
+model TrustTransaction {
+  id          String       @id @default(cuid())
+  accountId   String
+  account     TrustAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  firmId      String
+  type        String       // deposit | withdrawal | transfer
+  amount      Decimal      @db.Decimal(12, 2)
+  balanceAfter Decimal     @db.Decimal(12, 2)
+  description String?
+  reference   String?
+  createdAt   DateTime     @default(now())
+
+  @@index([accountId])
+  @@index([firmId])
 }

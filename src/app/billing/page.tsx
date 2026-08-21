@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Shell from "@/components/Shell";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card } from "@/components/ui";
@@ -17,6 +17,20 @@ export default function BillingPage() {
   const [minutes, setMinutes] = useState(30);
   const [rate, setRate] = useState(6000);
   const [invoiceCaseId, setInvoiceCaseId] = useState("");
+  const [invoices,setInvoices]=useState<{id:string;number:string;status:string;total:string;clientId?:string;caseId?:string;createdAt:string}[]>([]);
+  const [invoiceSaving,setInvoiceSaving]=useState(false);
+  const [timerRunning,setTimerRunning]=useState(false);
+  const [timerStart,setTimerStart]=useState<number|null>(null);
+  const [payments,setPayments]=useState<{id:string;invoiceId?:string;amount:string;method:string}[]>([]);
+
+  const loadInvoices=async()=>{ try{ const r=await fetch("/api/invoices"); if(r.ok) setInvoices(await r.json()); }catch{} };
+  const loadPayments=async()=>{ try{ const r=await fetch("/api/payments"); if(r.ok) setPayments(await r.json()); }catch{} };
+  useEffect(()=>{ loadInvoices(); loadPayments(); },[]);
+  useEffect(()=>{
+    if(!timerRunning) return;
+    const id=setInterval(()=>{},1000);
+    return ()=>clearInterval(id);
+  },[timerRunning]);
 
   const log = () => {
     if (!caseId || !description.trim()) return;
@@ -80,11 +94,19 @@ export default function BillingPage() {
                 className="focus-ring text-sm border border-ink-200 rounded-md px-3 py-2"
               />
             </div>
-            <div className="flex flex-wrap gap-2.5">
+            <div className="flex flex-wrap gap-2.5 items-center">
               <label className="flex items-center gap-1.5 text-xs text-ink-500">
                 Minutes
                 <input type="number" min={5} step={5} value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className="focus-ring w-20 text-sm border border-ink-200 rounded-md px-2 py-1.5" />
               </label>
+              <button onClick={()=>{
+                if(timerRunning){
+                  if(timerStart) setMinutes(m=> m + Math.max(1, Math.round((Date.now()-timerStart)/60000)));
+                  setTimerRunning(false); setTimerStart(null);
+                } else { setTimerStart(Date.now()); setTimerRunning(true); }
+              }} className={`focus-ring text-xs border rounded-md px-3 py-1.5 ${timerRunning?"bg-rust-500 text-white border-rust-500":"border-ink-200 hover:border-brass-300"}`}>
+                {timerRunning?"Stop timer":"Start timer"}
+              </button>
               <label className="flex items-center gap-1.5 text-xs text-ink-500">
                 Rate / hr (₹)
                 <input type="number" min={0} step={500} value={rate} onChange={(e) => setRate(Number(e.target.value))} className="focus-ring w-24 text-sm border border-ink-200 rounded-md px-2 py-1.5" />
@@ -185,6 +207,30 @@ export default function BillingPage() {
                       <span>Total due</span>
                       <span className="font-mono">₹{invoiceTotal.toLocaleString("en-IN")}</span>
                     </div>
+                    <button onClick={async()=>{
+                      if(!invoiceCaseId || invoiceEntries.length===0) return;
+                      setInvoiceSaving(true);
+                      const lineItems = invoiceEntries.map(t=>({ description:t.description, minutes:t.minutes, rate:Number(t.rate), amount: minutesToBillable(t.minutes, Number(t.rate)) }));
+                      const r=await fetch("/api/invoices",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ caseId: invoiceCaseId, clientId: invoiceCase?.clientId, lineItems })});
+                      const d=await r.json().catch(()=>({}));
+                      if(!r.ok) alert(d.error||"Create invoice failed");
+                      else { await loadInvoices(); for(const t of invoiceEntries){ try{ await toggleTimeEntryBilled(t.id);}catch{} } }
+                      setInvoiceSaving(false);
+                    }} disabled={invoiceSaving || invoiceEntries.length===0} className="focus-ring w-full text-xs bg-ink-900 hover:bg-ink-800 text-white rounded-md py-2 disabled:opacity-40 mb-2">
+                      {invoiceSaving?"Saving…":"Save as Invoice (IOLTA-ready)"}
+                    </button>
+                    <button onClick={async()=>{
+                      const inv = invoices.find(i=> i.caseId===invoiceCaseId && i.status!=="paid");
+                      if(!inv){ alert("Create or select a saved invoice first"); return; }
+                      const method = prompt("Payment method: stripe (if STRIPE_SECRET_KEY set → Checkout) / upi / cash / trust","upi") || "upi";
+                      const r=await fetch("/api/payments",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ invoiceId: inv.id, amount: Number(inv.total), method })});
+                      const d=await r.json().catch(()=>({}));
+                      if(!r.ok) alert(d.error||"Payment failed");
+                      else if(d.checkoutUrl){ window.open(d.checkoutUrl,"_blank"); }
+                      else { alert(`Payment recorded via ${method}`); await loadPayments(); await loadInvoices(); }
+                    }} className="focus-ring w-full text-xs border border-ink-200 rounded-md py-2 hover:border-brass-300 mb-2">
+                      Record payment (Stripe/UPI/Cash/Trust)
+                    </button>
                     {invoiceClient?.phone && (
                       <a
                         href={buildWhatsAppLink(
@@ -200,6 +246,17 @@ export default function BillingPage() {
                     )}
                   </>
                 )}
+              </div>
+            )}
+            {invoices.length>0 && (
+              <div className="bg-ink-50 rounded-md p-3 mt-3">
+                <div className="text-xs uppercase tracking-wide text-ink-400 mb-2">Saved invoices ({invoices.length})</div>
+                <ul className="space-y-1.5 max-h-40 overflow-auto">
+                  {invoices.filter(i=> !invoiceCaseId || i.caseId===invoiceCaseId).slice(0,5).map(inv=>(
+                    <li key={inv.id} className="flex justify-between text-xs text-ink-600"><span className="truncate">{inv.number} · {inv.status} · ₹{Number(inv.total).toLocaleString("en-IN")}</span><span className="font-mono shrink-0">{new Date(inv.createdAt).toLocaleDateString()}</span></li>
+                  ))}
+                </ul>
+                <div className="text-xs text-ink-400 mt-2">Payments: {payments.filter(p=> invoices.some(i=>i.id===p.invoiceId)).length} recorded · Trust-eligible via trust method.</div>
               </div>
             )}
           </Card>

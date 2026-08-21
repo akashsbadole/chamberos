@@ -6,8 +6,9 @@ import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card } from "@/components/ui";
 import { AIProviderId } from "@/lib/types";
 import { loadAISettings, saveAISettings, callAIProvider, PROVIDER_LABELS, DEFAULT_MODELS, FirmAISettings } from "@/lib/ai-provider";
-import { ShieldCheck, Sparkles, Eye, EyeOff, CheckCircle2, XCircle, LogOut, User, Building2 } from "lucide-react";
+import { ShieldCheck, Sparkles, Eye, EyeOff, CheckCircle2, XCircle, LogOut, User, Building2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface SessionInfo {
   name: string;
@@ -27,6 +28,7 @@ export default function SettingsPage() {
       />
       <div className="px-4 sm:px-8 pb-16 max-w-2xl space-y-6">
         <AccountCard />
+        <TeamCard />
         <AIProviderSettings />
         <AuditIntegrityCard />
       </div>
@@ -196,6 +198,18 @@ function AIProviderSettings() {
         {testResult === "ok" && <p className="text-xs text-moss-600 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Connected. Response: &ldquo;{testMessage}&rdquo;</p>}
         {testResult === "error" && <p className="text-xs text-rust-600 flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> {testMessage}</p>}
       </div>
+    </Card>
+  );
+}
+
+function TeamCard() {
+  const [role, setRole] = useState<string | null>(null);
+  useEffect(()=>{ fetch("/api/auth/me").then(r=>r.ok?r.json():null).then(d=> setRole(d?.role ?? null)).catch(()=>{}); }, []);
+  return (
+    <Card className="p-5 sm:p-6">
+      <div className="flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-brass-500"/><h2 className="font-display text-lg">Team</h2></div>
+      <p className="text-sm text-ink-500 mb-3">Create Lawyer and Paralegal accounts for this firm. Only Admin can manage users.</p>
+      {role === "ADMIN" ? <Link href="/settings/users" className="focus-ring inline-flex bg-ink-900 text-white text-sm rounded-md px-4 py-2">Manage users</Link> : <p className="text-xs text-ink-400">Current role: {role ?? "unknown"} — ask an Admin to create your account.</p>}
     </Card>
   );
 }

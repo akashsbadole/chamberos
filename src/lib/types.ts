@@ -54,6 +54,8 @@ export interface CalendarEvent {
   end: string;
   type: "hearing" | "meeting" | "deadline" | "internal";
   location: string;
+  meetingLink?: string | null;
+  description?: string | null;
 }
 
 export interface ChatMessage {
@@ -158,4 +160,75 @@ export interface GlossaryTerm {
   term: string;
   definition: string;
   tags: string[];
+}
+
+export interface DocumentTemplate {
+  id: string;
+  firmId: string;
+  name: string;
+  category: "contract" | "pleading" | "letter" | "other";
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SignatureRequest {
+  id: string;
+  firmId: string;
+  documentId: string;
+  documentName?: string;
+  signerName: string;
+  signerEmail: string;
+  status: "pending" | "signed" | "declined";
+  token: string;
+  signatureData?: string;
+  signedAt?: string;
+  createdAt: string;
+}
+
+export interface Invoice {
+  id: string;
+  firmId: string;
+  caseId?: string;
+  clientId?: string;
+  number: string;
+  status: "draft" | "sent" | "paid" | "void";
+  lineItems: { description: string; minutes?: number; rate?: number; amount: number }[];
+  subtotal: number;
+  taxRate?: number;
+  total: number;
+  dueDate?: string;
+  pdfKey?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payment {
+  id: string;
+  firmId: string;
+  invoiceId?: string;
+  amount: number;
+  method: "stripe" | "paypal" | "upi" | "cash" | "trust";
+  status: "pending" | "succeeded" | "failed";
+  gatewayRef?: string;
+  createdAt: string;
+}
+
+export interface MessageThread {
+  id: string;
+  firmId: string;
+  clientId: string;
+  caseId?: string;
+  subject?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TrustAccount {
+  id: string;
+  firmId: string;
+  clientId: string;
+  balance: number;
+  createdAt: string;
+  updatedAt: string;
 }

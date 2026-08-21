@@ -7,8 +7,9 @@ import { PageHeader, Card } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { detectConflicts, suggestSlots } from "@/lib/ai";
 import { CalendarEvent } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Sparkles, Trash2, MessageCircle, Pencil, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Sparkles, Trash2, MessageCircle, Pencil, X, Video } from "lucide-react";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { getMeetingLinkLabel } from "@/lib/video";
 
 const TYPE_COLORS: Record<string, string> = {
   hearing: "bg-ink-900 text-white",
@@ -25,10 +26,11 @@ export default function CalendarPage() {
   const [type, setType] = useState<CalendarEvent["type"]>("meeting");
   const [duration, setDuration] = useState(30);
   const [start, setStart] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
   const [conflictCheck, setConflictCheck] = useState<ReturnType<typeof detectConflicts> | null>(null);
   const [suggestions, setSuggestions] = useState<{ start: string; end: string }[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<{ title: string; type: CalendarEvent["type"]; location: string; start: string }>({ title: "", type: "meeting", location: "", start: "" });
+  const [editDraft, setEditDraft] = useState<{ title: string; type: CalendarEvent["type"]; location: string; meetingLink: string; start: string }>({ title: "", type: "meeting", location: "", meetingLink: "", start: "" });
 
   const sortedEvents = useMemo(() => [...events].sort((a, b) => a.start.localeCompare(b.start)), [events]);
 
@@ -56,9 +58,11 @@ export default function CalendarPage() {
       end: endDate.toISOString(),
       type,
       location: type === "hearing" ? "Court" : "TBD",
-    });
+      meetingLink: meetingLink.trim() || null,
+    } as unknown as CalendarEvent);
     setTitle("");
     setStart("");
+    setMeetingLink("");
     setConflictCheck(null);
     setSuggestions(null);
   };
@@ -74,7 +78,7 @@ export default function CalendarPage() {
       />
       <div className="px-8 pb-16 grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-5">
-          <div className="text-xs uppercase tracking-wide text-ink-400 mb-3">Upcoming &amp; recent</div>
+          <div className="flex items-center justify-between mb-3"><div className="text-xs uppercase tracking-wide text-ink-400">Upcoming &amp; recent</div><a href="/api/events/ics" className="focus-ring text-xs border border-ink-200 rounded-md px-3 py-1.5 hover:border-brass-300">Export .ics (Outlook/Google)</a></div>
           <ul className="divide-y divide-ink-100">
             {sortedEvents.map((e) => {
               const linkedCase = cases.find((c) => c.id === e.caseId);
@@ -87,6 +91,7 @@ export default function CalendarPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <input value={editDraft.title} onChange={(ev) => setEditDraft(d => ({ ...d, title: ev.target.value }))} placeholder="Title" className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
                       <input value={editDraft.location} onChange={(ev) => setEditDraft(d => ({ ...d, location: ev.target.value }))} placeholder="Location" className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
+                      <input value={editDraft.meetingLink} onChange={(ev) => setEditDraft(d => ({ ...d, meetingLink: ev.target.value }))} placeholder="Meeting link" className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
                       <select value={editDraft.type} onChange={(ev) => setEditDraft(d => ({ ...d, type: ev.target.value as CalendarEvent["type"] }))} className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5">
                         <option value="meeting">Meeting</option>
                         <option value="hearing">Hearing</option>
@@ -102,6 +107,7 @@ export default function CalendarPage() {
                           const patch: Partial<CalendarEvent> = {};
                           if (editDraft.title.trim()) patch.title = editDraft.title.trim();
                           if (editDraft.location !== e.location) patch.location = editDraft.location;
+                          if (editDraft.meetingLink !== (e as unknown as {meetingLink?:string}).meetingLink) (patch as unknown as Record<string,unknown>).meetingLink = editDraft.meetingLink;
                           if (editDraft.type !== e.type) patch.type = editDraft.type;
                           if (editDraft.start) {
                             const s = new Date(editDraft.start);
@@ -133,6 +139,11 @@ export default function CalendarPage() {
                       {new Date(e.start).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                     </div>
                   </div>
+                  {(e as unknown as {meetingLink?:string}).meetingLink && (
+                    <a href={(e as unknown as {meetingLink:string}).meetingLink} target="_blank" rel="noopener noreferrer" title={getMeetingLinkLabel((e as unknown as {meetingLink:string}).meetingLink)} className="focus-ring text-brass-500 hover:text-brass-600 transition-colors shrink-0">
+                      <Video className="w-3.5 h-3.5" />
+                    </a>
+                  )}
                   {linkedClient?.phone && (
                     <a
                       href={buildWhatsAppLink(linkedClient.phone, waMessage)}
@@ -145,7 +156,7 @@ export default function CalendarPage() {
                     </a>
                   )}
                   <button
-                    onClick={() => { setEditingId(e.id); setEditDraft({ title: e.title, type: e.type, location: e.location ?? "", start: toLocalInputValue(e.start) }); }}
+                    onClick={() => { setEditingId(e.id); setEditDraft({ title: e.title, type: e.type, location: e.location ?? "", meetingLink: (e as unknown as {meetingLink?:string}).meetingLink ?? "", start: toLocalInputValue(e.start) }); }}
                     aria-label={`Edit ${e.title}`}
                     className="focus-ring text-ink-300 hover:text-brass-500 transition-colors shrink-0"
                   >
@@ -185,6 +196,7 @@ export default function CalendarPage() {
                 </select>
               </div>
               <input type="datetime-local" value={start} onChange={(e) => { setStart(e.target.value); setConflictCheck(null); }} className="focus-ring w-full text-sm border border-ink-200 rounded-md px-3 py-2" />
+              <input value={meetingLink} onChange={e=>setMeetingLink(e.target.value)} placeholder="Meeting link (Zoom / Meet / Teams) — optional, or set VIDEO_PROVIDER" className="focus-ring w-full text-sm border border-ink-200 rounded-md px-3 py-2" />
 
               <button onClick={checkForm} disabled={!start} className="focus-ring w-full text-sm border border-ink-200 rounded-md py-2 hover:border-brass-300 disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-brass-500" /> Check for conflicts

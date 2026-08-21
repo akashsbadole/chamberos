@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await queryOne(`SELECT id FROM "CalendarEvent" WHERE id = $1 AND "firmId" = $2`, [id, firmId]);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const allowed = ["title", "start", "end", "type", "location"];
+  const allowed = ["title", "start", "end", "type", "location", "meetingLink", "description"];
   const fields = Object.keys(patch).filter((f) => allowed.includes(f));
   if (fields.length === 0) return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   if (patch.type !== undefined && !EVENT_TYPES.includes(patch.type)) {
