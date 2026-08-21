@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/api-helpers";
 import { query, queryOne } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { createStripeCheckout, stripeEnabled } from "@/lib/payments";
+import { pushPaymentToAccounting } from "@/lib/accounting";
 
 export async function GET() {
   const auth = await requireSession();
@@ -34,5 +35,6 @@ export async function POST(req: NextRequest) {
     }
   }
   await recordAuditEvent({ firmId, userId, action:"payment_recorded", detail:`Payment ${amount} via ${m} for ${invoiceId||"no invoice"}`});
+  pushPaymentToAccounting({ id, amount: Number(amount), invoiceId: invoiceId||undefined }).catch(()=>{});
   return NextResponse.json(row, {status:201});
 }

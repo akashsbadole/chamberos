@@ -50,6 +50,7 @@ model Firm {
   payments          Payment[]
   messageThreads    MessageThread[]
   trustAccounts     TrustAccount[]
+  recurringInvoices RecurringInvoice[]
 }
 
 enum Role {
@@ -163,6 +164,10 @@ model CaseDocument {
   case       LegalCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
   name       String
   content    String    // consider field-level encryption or object storage + pointer
+  storageKey String?   // S3 key when file uploaded via /api/upload (first-party S3 hook)
+  mimeType   String?
+  size       Int?
+  version    Int       @default(1)
   uploadedAt DateTime  @default(now())
 
   @@index([caseId])
@@ -455,4 +460,24 @@ model TrustTransaction {
 
   @@index([accountId])
   @@index([firmId])
+}
+
+model RecurringInvoice {
+  id           String   @id @default(cuid())
+  firmId       String
+  firm         Firm     @relation(fields: [firmId], references: [id])
+  caseId       String?
+  clientId     String?
+  templateId   String?  // Invoice template or DocumentTemplate id
+  cadence      String   // weekly | monthly | quarterly | yearly
+  lineItems    Json     // same shape as Invoice.lineItems
+  taxRate      Decimal? @db.Decimal(5,2)
+  nextRunAt    DateTime
+  lastRunAt    DateTime?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([firmId])
+  @@index([nextRunAt])
 }

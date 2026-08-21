@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-helpers";
 import { query, queryOne } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
+import { pushInvoiceToAccounting } from "@/lib/accounting";
+import { sendEmail } from "@/lib/email";
 
 export async function GET() {
   const auth = await requireSession();
@@ -26,5 +28,13 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString();
   const row = await queryOne(`INSERT INTO "Invoice" (id,"firmId","caseId","clientId",number,status,"lineItems",subtotal,"taxRate",total,"dueDate","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12) RETURNING *`, [id, firmId, caseId||null, clientId||null, number, status||"draft", JSON.stringify(lineItems), subtotal, taxRate?String(taxRate):null, total, dueDate||null, now]);
   await recordAuditEvent({ firmId, userId, action: "invoice_created", detail: `Invoice ${number} ${total}` });
+  // Hooks: accounting + email (best-effort, no await blocking)
+  pushInvoiceToAccounting({ id, number, total, clientId: clientId||undefined }).catch(()=>{});
+  if (clientId) {
+    query(`SELECT email FROM "Client" WHERE id=$1 AND "firmId"=$2`, [clientId, firmId]).then(rows=>{
+      const email = (rows as {email:string}[])[0]?.email;
+      if(email) sendEmail({ to: email, subject: `Invoice ${number} — ₹${Number(total).toLocaleString("en-IN")}`, html: `<p>Invoice ${number} for ₹${Number(total).toLocaleString("en-IN")} is ready.</p>`, firmId, userId }).catch(()=>{});
+    }).catch(()=>{});
+  }
   return NextResponse.json(row, { status:201 });
 }

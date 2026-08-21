@@ -22,10 +22,13 @@ export default function BillingPage() {
   const [timerRunning,setTimerRunning]=useState(false);
   const [timerStart,setTimerStart]=useState<number|null>(null);
   const [payments,setPayments]=useState<{id:string;invoiceId?:string;amount:string;method:string}[]>([]);
+  const [recurring,setRecurring]=useState<{id:string;cadence:string;active:boolean;nextRunAt:string;lineItems:{amount:number}[]}[]>([]);
+  const [recCadence,setRecCadence]=useState<"weekly"|"monthly"|"quarterly"|"yearly">("monthly");
 
   const loadInvoices=async()=>{ try{ const r=await fetch("/api/invoices"); if(r.ok) setInvoices(await r.json()); }catch{} };
   const loadPayments=async()=>{ try{ const r=await fetch("/api/payments"); if(r.ok) setPayments(await r.json()); }catch{} };
-  useEffect(()=>{ loadInvoices(); loadPayments(); },[]);
+  const loadRecurring=async()=>{ try{ const r=await fetch("/api/recurring-invoices"); if(r.ok) setRecurring(await r.json()); }catch{} };
+  useEffect(()=>{ loadInvoices(); loadPayments(); loadRecurring(); },[]);
   useEffect(()=>{
     if(!timerRunning) return;
     const id=setInterval(()=>{},1000);
@@ -259,6 +262,30 @@ export default function BillingPage() {
                 <div className="text-xs text-ink-400 mt-2">Payments: {payments.filter(p=> invoices.some(i=>i.id===p.invoiceId)).length} recorded · Trust-eligible via trust method.</div>
               </div>
             )}
+            <div className="bg-ink-50 rounded-md p-3 mt-3">
+              <div className="text-xs uppercase tracking-wide text-ink-400 mb-2">Recurring billing</div>
+              <div className="flex gap-2 mb-2">
+                <select value={recCadence} onChange={e=>setRecCadence(e.target.value as never)} className="focus-ring text-xs border border-ink-200 rounded-md px-2 py-1.5"><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="yearly">Yearly</option></select>
+                <button onClick={async()=>{
+                  if(!invoiceCaseId || invoiceEntries.length===0){ alert("Select matter with unbilled time first"); return; }
+                  const lineItems = invoiceEntries.map(t=>({description:t.description, minutes:t.minutes, rate:Number(t.rate), amount: minutesToBillable(t.minutes, Number(t.rate))}));
+                  const r=await fetch("/api/recurring-invoices",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({caseId:invoiceCaseId, clientId: invoiceCase?.clientId, cadence:recCadence, lineItems})});
+                  const d=await r.json().catch(()=>({}));
+                  if(!r.ok) alert(d.error||"Failed");
+                  else await loadRecurring();
+                }} className="focus-ring text-xs bg-ink-900 text-white rounded-md px-3 py-1.5">Create {recCadence}</button>
+              </div>
+              {recurring.length===0 ? <p className="text-xs text-ink-400">No recurring schedules.</p> :
+                <ul className="space-y-1.5">
+                  {recurring.slice(0,5).map(r=>(
+                    <li key={r.id} className="flex justify-between items-center text-xs text-ink-600">
+                      <span>{r.cadence} · {r.active?"active":"paused"} · next {new Date(r.nextRunAt).toLocaleDateString()} · ₹{r.lineItems.reduce((s:number,l:{amount:number})=>s+Number(l.amount),0).toLocaleString("en-IN")}</span>
+                      <button onClick={async()=>{ const n=!r.active; const resp=await fetch(`/api/recurring-invoices/${r.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({active:n})}); if(resp.ok) await loadRecurring(); }} className="text-ink-400 hover:text-ink-600 border border-ink-200 rounded px-2 py-0.5">{r.active?"Pause":"Resume"}</button>
+                    </li>
+                  ))}
+                </ul>
+              }
+            </div>
           </Card>
         </div>
       </div>
