@@ -6,11 +6,11 @@ import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { minutesToBillable } from "@/lib/ai";
-import { CheckCircle2, Circle, Receipt, MessageCircle } from "lucide-react";
+import { CheckCircle2, Circle, Receipt, MessageCircle, Trash2 } from "lucide-react";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 export default function BillingPage() {
-  const { cases, clients, timeEntries, addTimeEntry, toggleTimeEntryBilled, ready } = useStore();
+  const { cases, clients, timeEntries, addTimeEntry, toggleTimeEntryBilled, removeTimeEntry, ready } = useStore();
   const { dict } = useLocale();
   const [caseId, setCaseId] = useState("");
   const [description, setDescription] = useState("");
@@ -116,7 +116,10 @@ export default function BillingPage() {
                           <div className="text-xs text-ink-400">{linkedCase?.title ?? "Unlinked matter"}</div>
                         </td>
                         <td className="px-2 py-2.5 text-right text-xs text-ink-500 font-mono">{t.minutes} min</td>
-                        <td className="px-5 py-2.5 text-right font-mono text-ink-700">₹{minutesToBillable(t.minutes, t.rate).toLocaleString("en-IN")}</td>
+                        <td className="px-2 py-2.5 text-right font-mono text-ink-700">₹{minutesToBillable(t.minutes, t.rate).toLocaleString("en-IN")}</td>
+                        <td className="px-5 py-2.5 w-8">
+                          <button onClick={async () => { if (!confirm(`Delete time entry "${t.description}"?`)) return; try { await removeTimeEntry(t.id); } catch (err: unknown) { alert(err instanceof Error ? err.message : "Delete failed"); } }} aria-label={`Delete ${t.description}`} className="focus-ring text-ink-300 hover:text-rust-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </td>
                       </tr>
                     );
                   })}

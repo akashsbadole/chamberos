@@ -7,7 +7,7 @@ import { Card, StatusBadge, RiskBadge, EmptyState } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { findClauses, draftClause, chatWithCase, summarizeMeeting, generateResearchQuestions, generateDocument, DOCUMENT_TEMPLATE_TYPES } from "@/lib/ai";
 import { ChatMessage, CaseDocument, MeetingNote, Client, Evidence, ResearchQuestion } from "@/lib/types";
-import { ArrowLeft, Upload, Sparkles, Send, CheckCircle2, Circle, Wand2, Mic, ListChecks, HelpCircle, Camera, FileSearch, Download } from "lucide-react";
+import { ArrowLeft, Upload, Sparkles, Send, CheckCircle2, Circle, Wand2, Mic, ListChecks, HelpCircle, Camera, FileSearch, Download, Trash2 } from "lucide-react";
 
 type Tab = "overview" | "research" | "documents" | "evidence" | "chat" | "meetings" | "compliance";
 
@@ -21,13 +21,17 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     evidence,
     researchQuestions,
     addDocument,
+    removeDocument,
     toggleCompliance,
     addComplianceItem,
+    removeComplianceItem,
     addChatMessage,
     addMeetingNote,
     addEvidence,
+    removeEvidence,
     addResearchQuestions,
     answerResearchQuestion,
+    removeResearchQuestion,
     ready,
   } = useStore();
   const [tab, setTab] = useState<Tab>("overview");
@@ -98,6 +102,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             questions={researchQuestions.filter((q) => q.caseId === legalCase.id)}
             onGenerate={(qs) => addResearchQuestions(qs)}
             onAnswer={(id, answer) => answerResearchQuestion(id, answer)}
+            onRemove={(id) => removeResearchQuestion(id)}
           />
         )}
         {tab === "evidence" && (
@@ -105,6 +110,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             legalCase={legalCase}
             items={evidence.filter((e) => e.caseId === legalCase.id)}
             onAdd={(item) => addEvidence(item)}
+            onRemove={(evidenceId) => removeEvidence(legalCase.id, evidenceId)}
           />
         )}
         {tab === "documents" && (
@@ -112,6 +118,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             legalCase={legalCase}
             clientName={client?.name ?? "Counterparty"}
             onUpload={(doc) => addDocument(legalCase.id, doc)}
+            onRemove={(docId) => removeDocument(legalCase.id, docId)}
           />
         )}
         {tab === "chat" && (
@@ -133,6 +140,7 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
             legalCase={legalCase}
             onToggle={(itemId) => toggleCompliance(legalCase.id, itemId)}
             onAdd={(item) => addComplianceItem(legalCase.id, item)}
+            onRemove={(itemId) => removeComplianceItem(itemId)}
           />
         )}
       </div>
@@ -183,10 +191,12 @@ function DocumentsTab({
   legalCase,
   clientName,
   onUpload,
+  onRemove,
 }: {
   legalCase: ReturnType<typeof useStore>["cases"][number];
   clientName: string;
   onUpload: (doc: CaseDocument) => void;
+  onRemove: (docId: string) => void;
 }) {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(legalCase.documents[0]?.id ?? null);
   const [pasteText, setPasteText] = useState("");
@@ -235,15 +245,16 @@ function DocumentsTab({
           ) : (
             <ul className="space-y-1">
               {legalCase.documents.map((d) => (
-                <li key={d.id}>
+                <li key={d.id} className="flex items-center gap-1">
                   <button
                     onClick={() => setSelectedDocId(d.id)}
-                    className={`focus-ring w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                    className={`focus-ring flex-1 text-left px-3 py-2 rounded-md text-sm transition-colors ${
                       selectedDocId === d.id ? "bg-brass-100 text-brass-700" : "hover:bg-ink-50 text-ink-700"
                     }`}
                   >
                     {d.name}
                   </button>
+                  <button onClick={async () => { if (!confirm(`Delete document "${d.name}"?`)) return; try { await onRemove(d.id); if (selectedDocId === d.id) setSelectedDocId(legalCase.documents.find(x => x.id !== d.id)?.id ?? null); } catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); } }} aria-label={`Delete ${d.name}`} className="focus-ring text-ink-300 hover:text-rust-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
                 </li>
               ))}
             </ul>
@@ -622,12 +633,14 @@ function ResearchAssistantTab({
   questions,
   onGenerate,
   onAnswer,
+  onRemove,
 }: {
   legalCase: ReturnType<typeof useStore>["cases"][number];
   client: Client | undefined;
   questions: ResearchQuestion[];
   onGenerate: (qs: ResearchQuestion[]) => void;
   onAnswer: (id: string, answer: string) => void;
+  onRemove: (id: string) => void;
 }) {
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
 
@@ -670,10 +683,11 @@ function ResearchAssistantTab({
               <li key={q.id} className="border border-ink-100 rounded-md p-3.5">
                 <div className="flex items-start gap-2 mb-2">
                   <HelpCircle className="w-4 h-4 text-brass-500 mt-0.5 shrink-0" />
-                  <div>
+                  <div className="flex-1">
                     <p className="text-sm text-ink-800">{q.question}</p>
                     <p className="text-xs text-ink-400 mt-0.5">{q.reason}</p>
                   </div>
+                  <button onClick={async () => { if (!confirm("Delete this research question?")) return; try { await onRemove(q.id); } catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); } }} aria-label="Delete question" className="focus-ring text-ink-300 hover:text-rust-500 p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
                 <div className="flex gap-2">
                   <input
@@ -704,10 +718,11 @@ function ResearchAssistantTab({
             {answered.map((q) => (
               <li key={q.id} className="text-sm flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-moss-500 mt-0.5 shrink-0" />
-                <div>
+                <div className="flex-1">
                   <p className="text-ink-500">{q.question}</p>
                   <p className="text-ink-800">{q.answer}</p>
                 </div>
+                <button onClick={async () => { if (!confirm("Delete this research question?")) return; try { await onRemove(q.id); } catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); } }} aria-label="Delete answered question" className="focus-ring text-ink-300 hover:text-rust-500 p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
               </li>
             ))}
           </ul>
@@ -725,10 +740,12 @@ function EvidenceTab({
   legalCase,
   items,
   onAdd,
+  onRemove,
 }: {
   legalCase: ReturnType<typeof useStore>["cases"][number];
   items: Evidence[];
   onAdd: (item: Evidence) => void;
+  onRemove: (evidenceId: string) => void;
 }) {
   const [label, setLabel] = useState("");
   const [source, setSource] = useState("");
@@ -811,7 +828,10 @@ function EvidenceTab({
               <li key={e.id} className="border border-ink-100 rounded-md p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-sm font-medium text-ink-800">{e.label}</span>
-                  <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-ink-50 text-ink-500 shrink-0">{e.kind}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-ink-50 text-ink-500 shrink-0">{e.kind}</span>
+                    <button onClick={async () => { if (!confirm(`Delete evidence "${e.label}"?`)) return; try { await onRemove(e.id); } catch (err: unknown) { alert(err instanceof Error ? err.message : "Delete failed"); } }} aria-label={`Delete ${e.label}`} className="focus-ring text-ink-300 hover:text-rust-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
                 {e.description && <p className="text-xs text-ink-500 mb-1">{e.description}</p>}
                 <p className="text-[11px] text-ink-400">
@@ -831,10 +851,12 @@ function ComplianceTab({
   legalCase,
   onToggle,
   onAdd,
+  onRemove,
 }: {
   legalCase: ReturnType<typeof useStore>["cases"][number];
   onToggle: (itemId: string) => void;
   onAdd: (item: { id: string; label: string; dueDate: string; done: boolean }) => void;
+  onRemove: (itemId: string) => void;
 }) {
   const [label, setLabel] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -870,6 +892,7 @@ function ComplianceTab({
                   {new Date(item.dueDate).toLocaleDateString()}
                   {overdue && " · overdue"}
                 </span>
+                <button onClick={async () => { if (!confirm(`Delete checklist item "${item.label}"?`)) return; try { await onRemove(item.id); } catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); } }} aria-label={`Delete ${item.label}`} className="focus-ring text-ink-300 hover:text-rust-500 p-1 shrink-0"><Trash2 className="w-3.5 h-3.5" /></button>
               </li>
             );
           })}

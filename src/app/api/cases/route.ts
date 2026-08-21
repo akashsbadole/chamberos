@@ -4,16 +4,17 @@ import { queryOne } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireSession();
-  if ("error" in auth) return auth.error;
-  const { firmId, userId } = auth.session;
+  try {
+    const auth = await requireSession();
+    if ("error" in auth) return auth.error;
+    const { firmId, userId } = auth.session;
 
-  const body = await req.json();
-  const { id, clientId, title, practiceArea, status, courtName, caseNumber, nextHearing, filingDeadline, compliance, documents } = body;
+    const body = await req.json();
+    const { id, clientId, title, practiceArea, status, courtName, caseNumber, nextHearing, filingDeadline, compliance, documents } = body;
 
   const row = await queryOne(
-    `INSERT INTO "LegalCase" (id, "firmId", "clientId", title, "practiceArea", status, "courtName", "caseNumber", "nextHearing", "filingDeadline")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    `INSERT INTO "LegalCase" (id, "firmId", "clientId", title, "practiceArea", status, "courtName", "caseNumber", "nextHearing", "filingDeadline", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now()) RETURNING *`,
     [
       id,
       firmId,
@@ -47,7 +48,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await recordAuditEvent({ firmId, userId, action: "case_created", caseId: id, clientId: clientId || null, detail: `Matter opened: ${title}` });
+    await recordAuditEvent({ firmId, userId, action: "case_created", caseId: id, clientId: clientId || null, detail: `Matter opened: ${title}` });
 
-  return NextResponse.json({ ...(row as object), compliance: complianceRows, documents: documentRows });
+    return NextResponse.json({ ...(row as object), compliance: complianceRows, documents: documentRows });
+  } catch (err) {
+    console.error("POST /api/cases error:", err);
+    return NextResponse.json({ error: (err as Error).message ?? "Internal error" }, { status: 500 });
+  }
 }

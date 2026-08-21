@@ -6,7 +6,7 @@ import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { Grievance } from "@/lib/types";
-import { CalendarClock, MessageSquareWarning, CheckCircle2, Clock3 } from "lucide-react";
+import { CalendarClock, MessageSquareWarning, CheckCircle2, Clock3, Trash2 } from "lucide-react";
 
 const GRIEVANCE_STATUS_STYLES: Record<Grievance["status"], string> = {
   open: "bg-rust-500/10 text-rust-600",
@@ -15,7 +15,7 @@ const GRIEVANCE_STATUS_STYLES: Record<Grievance["status"], string> = {
 };
 
 export default function ClientPortalPage() {
-  const { clients, cases, events, grievances, addGrievance, updateGrievanceStatus, ready } = useStore();
+  const { clients, cases, events, grievances, addGrievance, updateGrievanceStatus, removeGrievance, ready } = useStore();
   const { dict } = useLocale();
   const [viewClientId, setViewClientId] = useState("");
   const [subject, setSubject] = useState("");
@@ -147,6 +147,7 @@ export default function ClientPortalPage() {
                           <CheckCircle2 className="w-3 h-3" /> Resolve
                         </button>
                       )}
+                      <button onClick={async () => { if (!confirm(`Delete grievance "${g.subject}"?`)) return; try { await removeGrievance(g.id); } catch (e: unknown) { alert(e instanceof Error ? e.message : "Delete failed"); } }} className="focus-ring text-xs text-ink-300 hover:text-rust-500 border border-transparent hover:border-rust-200 rounded-md px-2.5 py-1 ml-auto flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button>
                     </div>
                   </li>
                 );

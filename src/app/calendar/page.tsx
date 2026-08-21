@@ -7,7 +7,7 @@ import { PageHeader, Card } from "@/components/ui";
 import { useStore } from "@/lib/store";
 import { detectConflicts, suggestSlots } from "@/lib/ai";
 import { CalendarEvent } from "@/lib/types";
-import { AlertTriangle, CheckCircle2, Sparkles, Trash2, MessageCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Sparkles, Trash2, MessageCircle, Pencil, X } from "lucide-react";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -18,7 +18,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function CalendarPage() {
-  const { events, cases, clients, addEvent, removeEvent, ready } = useStore();
+  const { events, cases, clients, addEvent, updateEvent, removeEvent, ready } = useStore();
   const { dict } = useLocale();
   const [title, setTitle] = useState("");
   const [caseId, setCaseId] = useState("");
@@ -27,6 +27,8 @@ export default function CalendarPage() {
   const [start, setStart] = useState("");
   const [conflictCheck, setConflictCheck] = useState<ReturnType<typeof detectConflicts> | null>(null);
   const [suggestions, setSuggestions] = useState<{ start: string; end: string }[] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ title: string; type: CalendarEvent["type"]; location: string; start: string }>({ title: "", type: "meeting", location: "", start: "" });
 
   const sortedEvents = useMemo(() => [...events].sort((a, b) => a.start.localeCompare(b.start)), [events]);
 
@@ -78,6 +80,44 @@ export default function CalendarPage() {
               const linkedCase = cases.find((c) => c.id === e.caseId);
               const linkedClient = clients.find((c) => c.id === linkedCase?.clientId);
               const waMessage = `Reminder: "${e.title}" is scheduled for ${new Date(e.start).toLocaleString()}${e.location ? ` at ${e.location}` : ""}.`;
+              const isEditing = editingId === e.id;
+              if (isEditing) {
+                return (
+                  <li key={e.id} className="py-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <input value={editDraft.title} onChange={(ev) => setEditDraft(d => ({ ...d, title: ev.target.value }))} placeholder="Title" className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
+                      <input value={editDraft.location} onChange={(ev) => setEditDraft(d => ({ ...d, location: ev.target.value }))} placeholder="Location" className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
+                      <select value={editDraft.type} onChange={(ev) => setEditDraft(d => ({ ...d, type: ev.target.value as CalendarEvent["type"] }))} className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5">
+                        <option value="meeting">Meeting</option>
+                        <option value="hearing">Hearing</option>
+                        <option value="deadline">Deadline</option>
+                        <option value="internal">Internal</option>
+                      </select>
+                      <input type="datetime-local" value={editDraft.start} onChange={(ev) => setEditDraft(d => ({ ...d, start: ev.target.value }))} className="focus-ring text-sm border border-ink-200 rounded-md px-2 py-1.5" />
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditingId(null)} className="focus-ring text-xs border border-ink-200 rounded-md px-3 py-1.5 hover:border-ink-300 flex items-center gap-1"><X className="w-3 h-3" /> Cancel</button>
+                      <button
+                        onClick={async () => {
+                          const patch: Partial<CalendarEvent> = {};
+                          if (editDraft.title.trim()) patch.title = editDraft.title.trim();
+                          if (editDraft.location !== e.location) patch.location = editDraft.location;
+                          if (editDraft.type !== e.type) patch.type = editDraft.type;
+                          if (editDraft.start) {
+                            const s = new Date(editDraft.start);
+                            if (!isNaN(s.getTime())) { patch.start = s.toISOString(); patch.end = new Date(s.getTime() + 30*60000).toISOString(); }
+                          }
+                          if (Object.keys(patch).length === 0) { setEditingId(null); return; }
+                          try { await updateEvent(e.id, patch); setEditingId(null); } catch (err: unknown) { alert(err instanceof Error ? err.message : "Update failed"); }
+                        }}
+                        className="focus-ring text-xs bg-ink-900 text-white rounded-md px-3 py-1.5 hover:bg-ink-800"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </li>
+                );
+              }
               return (
                 <li key={e.id} className="py-3 flex items-center gap-3">
                   <span className={`text-[10px] uppercase tracking-wide px-2 py-1 rounded font-medium shrink-0 ${TYPE_COLORS[e.type]}`}>
@@ -104,6 +144,13 @@ export default function CalendarPage() {
                       <MessageCircle className="w-3.5 h-3.5" />
                     </a>
                   )}
+                  <button
+                    onClick={() => { setEditingId(e.id); setEditDraft({ title: e.title, type: e.type, location: e.location ?? "", start: toLocalInputValue(e.start) }); }}
+                    aria-label={`Edit ${e.title}`}
+                    className="focus-ring text-ink-300 hover:text-brass-500 transition-colors shrink-0"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
                   <button onClick={() => removeEvent(e.id)} aria-label={`Delete ${e.title}`} className="focus-ring text-ink-300 hover:text-rust-500 transition-colors shrink-0">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

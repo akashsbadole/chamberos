@@ -5,10 +5,10 @@ import Shell from "@/components/Shell";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card, StatusBadge } from "@/components/ui";
 import { useStore } from "@/lib/store";
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 
 export default function CasesPage() {
-  const { cases, clients, ready } = useStore();
+  const { cases, clients, ready, removeCase } = useStore();
   const { dict } = useLocale();
   if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
 
@@ -25,33 +25,42 @@ export default function CasesPage() {
         {cases.map((c) => {
           const openItems = c.compliance.filter((i) => !i.done).length;
           return (
-            <Link key={c.id} href={`/cases/${c.id}`}>
-              <Card className="p-5 hover:border-brass-300 transition-colors">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-display text-lg text-ink-900">{c.title}</h3>
-                      <StatusBadge status={c.status} />
-                    </div>
-                    <p className="text-sm text-ink-500 mt-1">
-                      {clientName(c.clientId)} · {c.practiceArea} · {c.courtName}
-                    </p>
-                    <div className="flex items-center gap-4 mt-3 text-xs text-ink-400">
-                      <span className="font-mono">{c.caseNumber}</span>
-                      {c.nextHearing && (
-                        <span>Next hearing {new Date(c.nextHearing).toLocaleDateString()}</span>
-                      )}
-                      <span className="flex items-center gap-1">
-                        <FileText className="w-3.5 h-3.5" /> {c.documents.length} doc{c.documents.length !== 1 ? "s" : ""}
-                      </span>
-                      {openItems > 0 && (
-                        <span className="text-rust-500 font-medium">{openItems} open compliance item{openItems !== 1 ? "s" : ""}</span>
-                      )}
-                    </div>
+            <Card key={c.id} className="p-5 hover:border-brass-300 transition-colors">
+              <div className="flex items-start justify-between gap-4">
+                <Link href={`/cases/${c.id}`} className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-display text-lg text-ink-900">{c.title}</h3>
+                    <StatusBadge status={c.status} />
                   </div>
-                </div>
-              </Card>
-            </Link>
+                  <p className="text-sm text-ink-500 mt-1">
+                    {clientName(c.clientId)} · {c.practiceArea} · {c.courtName}
+                  </p>
+                  <div className="flex items-center gap-4 mt-3 text-xs text-ink-400">
+                    <span className="font-mono">{c.caseNumber}</span>
+                    {c.nextHearing && (
+                      <span>Next hearing {new Date(c.nextHearing).toLocaleDateString()}</span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5" /> {c.documents.length} doc{c.documents.length !== 1 ? "s" : ""}
+                    </span>
+                    {openItems > 0 && (
+                      <span className="text-rust-500 font-medium">{openItems} open compliance item{openItems !== 1 ? "s" : ""}</span>
+                    )}
+                  </div>
+                </Link>
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    if (!confirm(`Delete matter "${c.title}"? This will also delete its compliance items, documents, evidence and research. This cannot be undone.`)) return;
+                    try { await removeCase(c.id); } catch (err: unknown) { alert(err instanceof Error ? err.message : "Delete failed"); }
+                  }}
+                  aria-label={`Delete ${c.title}`}
+                  className="focus-ring text-ink-300 hover:text-rust-500 transition-colors shrink-0 self-center p-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </Card>
           );
         })}
       </div>

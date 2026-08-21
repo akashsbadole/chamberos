@@ -4,12 +4,14 @@ import Shell from "@/components/Shell";
 import { useLocale } from "@/lib/i18n/LocaleContext";
 import { PageHeader, Card, StatusBadge } from "@/components/ui";
 import { useStore } from "@/lib/store";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 export default function ClientsPage() {
-  const { clients, ready } = useStore();
+  const { clients, ready, removeClient } = useStore();
   const { dict } = useLocale();
+  const [err, setErr] = useState<string | null>(null);
   if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
 
   return (
@@ -24,6 +26,7 @@ export default function ClientsPage() {
           </Link>
         }
       />
+      {err && <div className="mx-8 mb-3 bg-rust-500/10 text-rust-700 text-sm rounded-md px-4 py-2 flex justify-between"><span>{err}</span><button onClick={() => setErr(null)} className="text-rust-500 ml-3">×</button></div>}
       <div className="px-8 pb-10 space-y-3">
         {clients.map((c) => (
           <Card key={c.id} className="p-5">
@@ -49,6 +52,17 @@ export default function ClientsPage() {
                 <span className={c.engagementSigned ? "text-moss-600" : "text-ink-400"}>
                   {c.engagementSigned ? "Engagement signed" : "Engagement pending"}
                 </span>
+                <button
+                  onClick={async () => {
+                    if (!confirm(`Delete client "${c.name}"? This cannot be undone.`)) return;
+                    setErr(null);
+                    try { await removeClient(c.id); } catch (e: unknown) { setErr(e instanceof Error ? e.message : "Delete failed"); }
+                  }}
+                  aria-label={`Delete ${c.name}`}
+                  className="focus-ring mt-1 flex items-center gap-1 text-ink-300 hover:text-rust-500 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
               </div>
             </div>
             {c.conflictFlags.length > 0 && (
