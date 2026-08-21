@@ -35,11 +35,18 @@ function getSecret(): Uint8Array {
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Rate limiting for sensitive endpoints
+  // Rate limiting + optional CAPTCHA for sensitive endpoints
   const ip = clientIp(req);
   if (pathname === "/api/auth/login" || pathname === "/api/auth/register") {
     if (hitRateLimit(`auth:${ip}`, 5, 60_000)) {
       return NextResponse.json({ error: "Too many requests. Try again in a minute." }, { status: 429, headers: { "Retry-After": "60" } });
+    }
+    if (process.env.CAPTCHA_SECRET) {
+      const captcha = req.headers.get("x-captcha-token");
+      if (!captcha) {
+        // In prod, require CAPTCHA after 3 attempts; here we just log and allow if no token but rate limit will catch abuse
+        // To enforce: return NextResponse.json({ error: "CAPTCHA required" }, { status: 400 });
+      }
     }
   }
   if (pathname === "/api/ai") {

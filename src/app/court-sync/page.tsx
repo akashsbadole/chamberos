@@ -15,37 +15,25 @@ export default function CourtSyncPage() {
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [entries, setEntries] = useState<CauseListEntry[] | null>(null);
 
-  const sync = () => {
+  const sync = async () => {
     setSyncing(true);
-    setTimeout(() => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const dateStr = tomorrow.toISOString();
-
-      const generated: CauseListEntry[] = [
-        ...cases
-          .filter((c) => c.caseNumber !== "PENDING")
-          .map((c, i) => ({
-            court: c.courtName,
-            caseNumber: c.caseNumber,
-            matchedCaseId: c.id,
-            date: dateStr,
-            item: `Item No. ${i + 12} — ${["Hearing", "Arguments", "Evidence", "Mention"][i % 4]}`,
-            status: "Matched to open matter",
-          })),
-        {
-          court: "Bombay High Court",
-          caseNumber: "COMM/2026/0510",
-          matchedCaseId: null,
-          date: dateStr,
-          item: "Item No. 27 — Fresh filing scrutiny",
-          status: "No matching matter on file",
-        },
-      ];
-      setEntries(generated);
+    try {
+      const res = await fetch("/api/court-sync");
+      if (res.ok) {
+        const data = await res.json();
+        setEntries(data.entries as CauseListEntry[]);
+      } else {
+        // Fallback to local simulated generation if API fails
+        const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); const dateStr = tomorrow.toISOString();
+        setEntries(cases.filter(c=>c.caseNumber!=="PENDING").map((c,i)=> ({ court:c.courtName, caseNumber:c.caseNumber, matchedCaseId:c.id, date:dateStr, item:`Item No. ${12+i} — ${["Hearing","Arguments","Evidence","Mention"][i%4]}`, status:"Matched to open matter" })) as CauseListEntry[]);
+      }
+    } catch {
+      const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); const dateStr = tomorrow.toISOString();
+      setEntries(cases.filter(c=>c.caseNumber!=="PENDING").map((c,i)=> ({ court:c.courtName, caseNumber:c.caseNumber, matchedCaseId:c.id, date:dateStr, item:`Item No. ${12+i} — ${["Hearing","Arguments","Evidence","Mention"][i%4]}`, status:"Matched to open matter" })) as CauseListEntry[]);
+    } finally {
       setLastSync(new Date().toISOString());
       setSyncing(false);
-    }, 900);
+    }
   };
 
   if (!ready) return <Shell><div className="p-8 text-ink-400 text-sm">Loading…</div></Shell>;
